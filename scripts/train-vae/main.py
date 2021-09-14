@@ -95,7 +95,8 @@ def main(config=None):
     path = outputDir + '/model_' + str(int(ts))
 
     vae.save(os.path.join(path, 'epoch_' + str(epochcounter - 1)))
-
+    encoder.save(os.path.join(path, 'encoder_epoch_' + str(epochcounter - 1) ))
+    
     # begin loop
     while epochcounter < nEpochmax:
         offset = (epochcounter - 1)*sizeStep
@@ -108,18 +109,19 @@ def main(config=None):
         train_set_tf = train_set_tf.shuffle(buffer_size=2000000)
         train_set_tf = train_set_tf.batch(64, drop_remainder=True)
 
-        vae = keras.models.load_model(
-            os.path.join(path, 'epoch_' + str(epochcounter - 1))
-        )
+#         vae = keras.models.load_model(
+#             os.path.join(path, 'epoch_' + str(epochcounter - 1))
+#         )
     
         vae.fit(train_set_tf, epochs=1, validation_data=val_set_tf)
 
         # change it: make a call to os to create a path
         vae.save(os.path.join(path, 'epoch_' + str(epochcounter)))
+        encoder.save(os.path.join(path, 'encoder_epoch_' + str(epochcounter - 1) ))
 
         epochcounter = epochcounter + 1
 
-
+    
 if __name__ == "__main__":
     # retrieve config file name from command line
     config = sys.argv[1] if len(sys.argv) > 1 else None
