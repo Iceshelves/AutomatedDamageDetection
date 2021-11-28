@@ -87,6 +87,7 @@ def split_train_and_test(catalog_path, test_set_size, labels_path=None,
                                 tiles.end_datetime.max())
 
         # add the tiles overlapping with the labels to the test set
+        labels['geometry'] = labels.buffer(0.0000001) # Add very small buffer to get rid of Polylines
         mask = tiles.intersects(labels.unary_union)
         test_set = test_set.append(tiles[mask])
 
