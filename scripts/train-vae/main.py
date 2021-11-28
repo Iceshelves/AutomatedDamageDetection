@@ -6,6 +6,7 @@ import datetime
 import json
 import os
 import sys
+from pathlib import Path
 
 import geopandas as gpd
 from tensorflow import keras
@@ -25,6 +26,7 @@ def parse_config(config):
     catPath = config['catalogPath']
     labPath = config['labelsPath']
     outputDir = config['outputDirectory']
+    logDir = config['logDirectory']
     sizeTestSet = int(config['sizeTestSet'])
     sizeValSet = int(config['sizeValidationSet'])
     roiFile = config['ROIFile']
@@ -34,7 +36,7 @@ def parse_config(config):
     sizeStep = int(config['sizeStep'])
     normThreshold = float(config['normalizationThreshold'])
         
-    return (catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile,
+    return (catPath, labPath, outputDir, logDir, sizeTestSet, sizeValSet, roiFile,
             bands, sizeCutOut, nEpochMax, sizeStep, normThreshold)
 
 
@@ -42,8 +44,11 @@ def main(config=None):
 
     # parse input arguments
     config = config if config is not None else "train-vae.ini"
-    catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile, bands, \
+    catPath, labPath, outputDir, logDir, sizeTestSet, sizeValSet, roiFile, bands, \
         sizeCutOut, nEpochmax, sizeStep, normThreshold = parse_config(config)
+    
+    Path(outputDir).mkdir(parents=True, exist_ok=True)
+    Path(logDir).mkdir(parents=True, exist_ok=True)
 
     # using datetime module for naming the current model, so that old models
     # do not get overwritten
@@ -95,6 +100,9 @@ def main(config=None):
     path = outputDir + '/model_' + str(int(ts))
 
     vae.save(os.path.join(path, 'epoch_' + str(epochcounter - 1)))
+    
+    log_dir = logDir + "/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    tensorboard_callback = keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
     # begin loop
     while epochcounter < nEpochmax:
@@ -112,7 +120,7 @@ def main(config=None):
             os.path.join(path, 'epoch_' + str(epochcounter - 1))
         )
     
-        vae.fit(train_set_tf, epochs=1, validation_data=val_set_tf)
+        vae.fit(train_set_tf, epochs=1, validation_data=val_set_tf, callbacks=[tensorboard_callback])
 
         # change it: make a call to os to create a path
         vae.save(os.path.join(path, 'epoch_' + str(epochcounter)))
