@@ -32,10 +32,24 @@ def parse_config(config):
     sizeCutOut = int(config['sizeCutOut'])
     nEpochMax = int(config['nEpochMax'])
     sizeStep = int(config['sizeStep'])
-    normThreshold = float(config['normalizationThreshold'])
+    #DATA
+    balanceRatio = float(config['balanceRatio'])
+    normThreshold = float(config['normalizationThreshold'])    
+    # MODEL
+    filter1 = int(config['filter1'])
+    filter2 = int(config['filter2'])
+    kernelSize = int(config['kernelSize'])
+    denseSize = int(config['sizeCutOut'])
+    latentDim = int(config['latentDim'])
+    #vae:
+    alpha = 5
+    batchSize = int(config['batchSize'])
+#     validationSplit = float(config['validationSplit'])
         
     return (catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile,
-            bands, sizeCutOut, nEpochMax, sizeStep, normThreshold)
+            bands, sizeCutOut, nEpochMax, sizeStep, balanceRatio, normThreshold,
+            filter1, filter2, kernelSize, denseSize, latentDim, 
+            alpha, batchSize)
 
 
 def main(config=None):
@@ -43,7 +57,10 @@ def main(config=None):
     # parse input arguments
     config = config if config is not None else "train-vae.ini"
     catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile, bands, \
-        sizeCutOut, nEpochmax, sizeStep, normThreshold = parse_config(config)
+        sizeCutOut, nEpochmax, sizeStep, balanceRatio, normThreshold, \
+        filter1, filter2, kernelSize, denseSize, latentDim, \
+        alpha, batchSize = parse_config(config)
+    
 
     # using datetime module for naming the current model, so that old models
     # do not get overwritten
@@ -88,12 +105,20 @@ def main(config=None):
     # Loop and feed to VAE
     epochcounter = 1  # start at 0 or adjust offset calculation
 
-    encoder_inputs, encoder, z, z_mean, z_log_var = VAE.make_encoder()
-    decoder = VAE.make_decoder()
-    vae = VAE.make_vae(encoder_inputs, z, z_mean, z_log_var, decoder)
+#     encoder_inputs, encoder, z, z_mean, z_log_var = VAE.make_encoder()
+#     decoder = VAE.make_decoder()
+#     vae = VAE.make_vae(encoder_inputs, z, z_mean, z_log_var, decoder)
+#     vae.compile(optimizer=keras.optimizers.Adam())
+    
+    encoder_inputs, encoder, z, z_mean, z_log_var = VAE.make_encoder(
+                            cutout_size,len(bands),
+                            filter_1,kernel_size,
+                            filter_2,dense_size,latent_dim)
+    decoder = VAE.make_decoder(latent_dim,filter_1,filter_2,kernel_size)
+    vae = VAE.make_vae(encoder_inputs, z, z_mean, z_log_var, decoder,alpha)
     vae.compile(optimizer=keras.optimizers.Adam())
+    
     path = outputDir + '/model_' + str(int(ts))
-
     vae.save(os.path.join(path, 'epoch_' + str(epochcounter - 1)))
     encoder.save(os.path.join(path, 'encoder_epoch_' + str(epochcounter - 1) ))
     
@@ -113,12 +138,14 @@ def main(config=None):
 #             os.path.join(path, 'epoch_' + str(epochcounter - 1))
 #         )
     
-        vae.fit(train_set_tf, epochs=1, validation_data=val_set_tf)
+        history = vae.fit(train_set_tf, epochs=1, validation_data=val_set_tf) 
+#         history = vae.fit(x_train, epochs=1, batch_size=batch_size, validation_split=train_val_split) # validatio_split does not work because we loop all data every epoch (and then its not independent validatoin data)
 
         # change it: make a call to os to create a path
-        vae.save(os.path.join(path, 'epoch_' + str(epochcounter)))
+        vae.save(os.path.join(path, 'model_epoch_' + str(epochcounter)))
         encoder.save(os.path.join(path, 'encoder_epoch_' + str(epochcounter - 1) ))
-
+        history.save(os.path.join(path , 'history_epoch_'  + str(epochcounter - 1) ))
+        
         epochcounter = epochcounter + 1
 
     
