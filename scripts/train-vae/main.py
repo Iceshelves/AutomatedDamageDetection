@@ -79,6 +79,7 @@ def main(config=None):
             labels_path=labPath,
             random_state=42  # random state ensures same data sets for each run
         )
+    
     # save dataset compositions
     path = outputDir + '/datasets_{}.json'.format(int(ts))
     with open(path, "w") as f:
@@ -128,7 +129,8 @@ def main(config=None):
  
         train_set = dataset.Dataset(train_set_paths, sizeCutOut, bands,
                                     offset=offset, shuffle_tiles=True,
-                                    norm_threshold=normThreshold)
+                                    norm_threshold=normThreshold,
+                                    balance_ratio = balanceRatio)
         train_set.set_mask(mask.unary_union, crs=mask.crs)
         train_set_tf = train_set.to_tf()
         train_set_tf = train_set_tf.shuffle(buffer_size=2000000)
