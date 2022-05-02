@@ -18,18 +18,7 @@ import matplotlib.pyplot as plt
 tf.random.set_seed(2) 
 
 
-# In[ ]:
-
-
-latent_dim = 4
-filter_1 = 3 #32
-filter_2 = 2 #64
-kernel_size = 5
-
-
 # ### Create sampling layer
-
-# In[3]:
 
 
 class Sampling(layers.Layer):
@@ -44,17 +33,9 @@ class Sampling(layers.Layer):
 
 
 # ### Build encoder
-# 
 
-# In[4]:
-
-
-def make_encoder():    
-    #filter_1 = 3 #32
-    #filter_2 = 2 #64
-    #kernel_size = 5 #3
-    dense_size = 16; 
-    encoder_inputs = keras.Input(shape=(20, 20,3)) # enter cut-out shape (20,20,3)
+def make_encoder(cutout_size,n_bands,filter_1,kernel_size,filter_2,dense_size,latent_dim):    
+    encoder_inputs = keras.Input(shape=(cutout_size, cutout_size,n_bands)) # enter cut-out shape (20,20,3)
     x = layers.Conv2D(filter_1, kernel_size, activation="relu", strides=2, padding="same")(encoder_inputs)
     x = layers.Conv2D(filter_2, kernel_size, activation="relu", strides=2, padding="same")(x)
     x = layers.Flatten()(x) # to vector
@@ -69,10 +50,7 @@ def make_encoder():
 
 # ### Build decoder
 
-# In[5]:
-
-
-def make_decoder(): 
+def make_decoder(latent_dim,filter_1,filter_2,kernel_size): 
     latent_inputs = keras.Input(shape=(latent_dim,))
     x = layers.Dense(5 * 5 * filter_2, activation="relu")(latent_inputs) # -- shape corresponding to encoder
     x = layers.Reshape((5, 5, filter_2))(x)
@@ -89,11 +67,8 @@ def make_decoder():
 
 # Update: instead of defining VAE as class, use function-wise definition
 
-# In[6]:
-
-
 # Define VAE model.
-def make_vae(encoder_inputs, z, z_mean, z_log_var, decoder):
+def make_vae(encoder_inputs, z, z_mean, z_log_var, decoder,alpha=5):
     outputs = decoder(z)
     vae = tf.keras.Model(inputs=encoder_inputs, outputs=outputs, name="vae")
 
@@ -107,7 +82,7 @@ def make_vae(encoder_inputs, z, z_mean, z_log_var, decoder):
     kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
     kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
 
-    alpha = 5
+#     alpha = 5
 
     # Play witht different alpha: -2, 0 , 1 ,2 ; 0.2 ; -0.5 ; 50
     # alpha = 10.; 

@@ -34,7 +34,7 @@ def parse_config(config):
     sizeStep = int(config['sizeStep'])
     #DATA
     balanceRatio = float(config['balanceRatio'])
-    normThreshold = float(config['normalizationThreshold'])    
+    normThreshold = float(config['normalizationThreshold'])
     # MODEL
     filter1 = int(config['filter1'])
     filter2 = int(config['filter2'])
@@ -45,10 +45,10 @@ def parse_config(config):
     alpha = 5
     batchSize = int(config['batchSize'])
 #     validationSplit = float(config['validationSplit'])
-        
+
     return (catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile,
             bands, sizeCutOut, nEpochMax, sizeStep, balanceRatio, normThreshold,
-            filter1, filter2, kernelSize, denseSize, latentDim, 
+            filter1, filter2, kernelSize, denseSize, latentDim,
             alpha, batchSize)
 
 
@@ -60,7 +60,7 @@ def main(config=None):
         sizeCutOut, nEpochmax, sizeStep, balanceRatio, normThreshold, \
         filter1, filter2, kernelSize, denseSize, latentDim, \
         alpha, batchSize = parse_config(config)
-    
+
 
     # using datetime module for naming the current model, so that old models
     # do not get overwritten
@@ -79,7 +79,7 @@ def main(config=None):
             labels_path=labPath,
             random_state=42  # random state ensures same data sets for each run
         )
-    
+
     # save dataset compositions
     path = outputDir + '/datasets_{}.json'.format(int(ts))
     with open(path, "w") as f:
@@ -91,14 +91,16 @@ def main(config=None):
     # is a preselection step across all data
     test_set = dataset.Dataset(test_set_paths, sizeCutOut, bands,
                                shuffle_tiles=True,
-                               norm_threshold=normThreshold)
+                               norm_threshold=normThreshold,
+                               balance_ratio=balanceRatio)
     test_set_tf = test_set.to_tf()
     test_set_tf = test_set_tf.batch(64, drop_remainder=True)
 
     # balanced validation set (i.e. apply mask)
     val_set = dataset.Dataset(val_set_paths, sizeCutOut, bands,
                               shuffle_tiles=True,
-                              norm_threshold=normThreshold)
+                              norm_threshold=normThreshold,
+                              balance_ratio=balanceRatio)
     val_set.set_mask(mask.unary_union, crs=mask.crs)
     val_set_tf = val_set.to_tf()
     val_set_tf = val_set_tf.batch(64, drop_remainder=True)
@@ -110,23 +112,23 @@ def main(config=None):
 #     decoder = VAE.make_decoder()
 #     vae = VAE.make_vae(encoder_inputs, z, z_mean, z_log_var, decoder)
 #     vae.compile(optimizer=keras.optimizers.Adam())
-    
+
     encoder_inputs, encoder, z, z_mean, z_log_var = VAE.make_encoder(
-                            cutout_size,len(bands),
-                            filter_1,kernel_size,
-                            filter_2,dense_size,latent_dim)
-    decoder = VAE.make_decoder(latent_dim,filter_1,filter_2,kernel_size)
+                            sizeCutOut,len(bands),
+                            filter1,kernelSize,
+                            filter2,denseSize,latentDim)
+    decoder = VAE.make_decoder(latentDim,filter1,filter2,kernelSize)
     vae = VAE.make_vae(encoder_inputs, z, z_mean, z_log_var, decoder,alpha)
     vae.compile(optimizer=keras.optimizers.Adam())
-    
+
     path = outputDir + '/model_' + str(int(ts))
     vae.save(os.path.join(path, 'epoch_' + str(epochcounter - 1)))
     encoder.save(os.path.join(path, 'encoder_epoch_' + str(epochcounter - 1) ))
-    
+
     # begin loop
     while epochcounter < nEpochmax:
         offset = (epochcounter - 1)*sizeStep
- 
+
         train_set = dataset.Dataset(train_set_paths, sizeCutOut, bands,
                                     offset=offset, shuffle_tiles=True,
                                     norm_threshold=normThreshold,
@@ -139,18 +141,18 @@ def main(config=None):
 #         vae = keras.models.load_model(
 #             os.path.join(path, 'epoch_' + str(epochcounter - 1))
 #         )
-    
-        history = vae.fit(train_set_tf, epochs=1, validation_data=val_set_tf) 
+
+        history = vae.fit(train_set_tf, epochs=1, validation_data=val_set_tf)
 #         history = vae.fit(x_train, epochs=1, batch_size=batch_size, validation_split=train_val_split) # validatio_split does not work because we loop all data every epoch (and then its not independent validatoin data)
 
         # change it: make a call to os to create a path
         vae.save(os.path.join(path, 'model_epoch_' + str(epochcounter)))
         encoder.save(os.path.join(path, 'encoder_epoch_' + str(epochcounter - 1) ))
         history.save(os.path.join(path , 'history_epoch_'  + str(epochcounter - 1) ))
-        
+
         epochcounter = epochcounter + 1
 
-    
+
 if __name__ == "__main__":
     # retrieve config file name from command line
     config = sys.argv[1] if len(sys.argv) > 1 else None

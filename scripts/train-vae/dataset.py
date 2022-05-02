@@ -86,7 +86,7 @@ class Dataset:
             )
         )
 
-    def _generate_cutouts(self, balance_ratio):
+    def _generate_cutouts(self):
         """
         Iterate over (a selection of) the tiles yielding all cutouts for each
         of them.
@@ -123,31 +123,31 @@ class Dataset:
             # drop NaN-containing windows
             da = da.stack(sample=('x', 'y'))
             da = da.dropna(dim='sample', how='any') # (band, x_win, y_win, sample)
-            
+
             ## ADDED:
-            
+
             # balance the ratio of labelled/unlabelled windows
             # - balance_ratio = N_labelled / N_unlabelled such that a balance of 1 means equal numbers of (un)labelled data windows
             if self.balance_ratio > 0:
-                
+
                 idx_labels = tile_cutouts.isel(band=-1) == 1   # all labelled pixels
                 labelled_windows = idx_labels.sum(('x_win','y_win')) > 0 # boolean: identify all windows that have at least one labelled
-                
+
                 # separate labelled and unlabelled windows
                 cutouts_label_1 = tile_cutouts.isel(sample=labelled_windows.values) # labelled
                 cutouts_label_0 = tile_cutouts.isel(sample=~labelled_windows.values)# unlabelled
 
-                N_label_1 = cutouts_label_1.isel(band=0,x_win=0,y_win=0).shape[0] # # number of labelled windows 
+                N_label_1 = cutouts_label_1.isel(band=0,x_win=0,y_win=0).shape[0] # # number of labelled windows
                 N_label_0 = int(1/self.balance_ratio * N_label_1) # number of unlabelled windows dependingn on balance ratio
 
                 # # select the windows according to the ratio
                 # # TO DO: select windows in a random order
                 data_train_label_1 = cutouts_label_1.isel(sample=np.arange(N_label_1))
                 data_train_label_0 = cutouts_label_0.isel(sample=np.arange(N_label_0))
-                
+
                 da = xr.concat((data_train_label_1,data_train_label_0),dim='sample')
-            
-            
+
+
             # normalize
             if self.norm_threshold is not None:
                 da = (da + 0.1) / (self.norm_threshold + 1)
@@ -158,5 +158,3 @@ class Dataset:
                 da.sample.coords['y'],
                 da.data.transpose(3, 1, 2, 0)  # samples, x_win, y_win, bands
             )
-            
-   
