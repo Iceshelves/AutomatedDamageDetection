@@ -92,7 +92,7 @@ def main(config=None):
     test_set = dataset.Dataset(test_set_paths, sizeCutOut, bands,
                                shuffle_tiles=True,
                                norm_threshold=normThreshold,
-                               balance_ratio=balanceRatio)
+                               balance_ratio=0)
     test_set_tf = test_set.to_tf()
     test_set_tf = test_set_tf.batch(64, drop_remainder=True)
 
@@ -100,7 +100,7 @@ def main(config=None):
     val_set = dataset.Dataset(val_set_paths, sizeCutOut, bands,
                               shuffle_tiles=True,
                               norm_threshold=normThreshold,
-                              balance_ratio=balanceRatio)
+                              balance_ratio=0)
     val_set.set_mask(mask.unary_union, crs=mask.crs)
     val_set_tf = val_set.to_tf()
     val_set_tf = val_set_tf.batch(64, drop_remainder=True)
@@ -132,7 +132,7 @@ def main(config=None):
         train_set = dataset.Dataset(train_set_paths, sizeCutOut, bands,
                                     offset=offset, shuffle_tiles=True,
                                     norm_threshold=normThreshold,
-                                    balance_ratio = balanceRatio)
+                                    balance_ratio = 0)
         train_set.set_mask(mask.unary_union, crs=mask.crs)
         train_set_tf = train_set.to_tf()
         train_set_tf = train_set_tf.shuffle(buffer_size=2000000)
@@ -148,7 +148,12 @@ def main(config=None):
         # change it: make a call to os to create a path
         vae.save(os.path.join(path, 'model_epoch_' + str(epochcounter)))
         encoder.save(os.path.join(path, 'encoder_epoch_' + str(epochcounter - 1) ))
-        history.save(os.path.join(path , 'history_epoch_'  + str(epochcounter - 1) ))
+        
+        # save history dict to jsson
+        hist_df = pd.DataFrame(history.history)  
+        hist_json_file = os.path.join(path, 'history_epoch_' + str(epochcounter - 1) )) 
+        with open(hist_json_file, mode='w') as f:
+            hist_df.to_json(f)
 
         epochcounter = epochcounter + 1
 
