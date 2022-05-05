@@ -164,14 +164,14 @@ class Dataset:
             if self.balance_ratio > 0:
 
                 # TO DO: make sure labels are included as a band in the DA
-                tile_cutouts = da
+                # tile_cutouts = da
 
-                idx_labels = tile_cutouts.isel(band=-1) == 1   # all labelled pixels (labels are added as last band)
+                idx_labels = da.isel(band=-1) == 1   # all labelled pixels (labels are added as last band)
                 labelled_windows = idx_labels.sum(('x_win','y_win')) > 0 # boolean: identify all windows that have at least one labelled
 
                 # separate labelled and unlabelled windows
-                cutouts_label_1 = tile_cutouts.isel(sample=labelled_windows.values) # labelled
-                cutouts_label_0 = tile_cutouts.isel(sample=~labelled_windows.values)# unlabelled
+                cutouts_label_1 = da.isel(sample=labelled_windows.values) # labelled
+                cutouts_label_0 = da.isel(sample=~labelled_windows.values)# unlabelled
 
                 N_label_1 = cutouts_label_1.isel(band=0,x_win=0,y_win=0).shape[0] # number of labelled windows (band=0 could be any band)
                 N_label_0 = int(1/self.balance_ratio * N_label_1) # number of unlabelled windows dependingn on balance ratio
