@@ -55,6 +55,83 @@ def _filter_labels(labels, start_datetime, end_datetime, verbose=True):
     return labels[mask]
 
 
+# def split_train_and_test(catalog_path, test_set_size, labels_path=None,
+#                          validation_set_size=None, random_state=None,
+#                          verbose=True):
+#     """
+#     The tiles in the provided STAC catalog are split in test, validation and
+#     training sets.
+
+#     :param catalog_path: STAC catalog path
+#     :param test_set_size: size of the test set
+#     :param labels_path: path to the labels. If provided, all tiles overlapping
+#         with the labels will be included in the test set
+#     :param validation_set_size: size of the validation set
+#     :param random_state: random state for the data set sampling
+#     :param verbose: if True, print info to stdout
+#     """
+
+#     # read tile catalog
+#     catalog = _read_tile_catalog(catalog_path)
+#     tiles = _catalog_to_geodataframe(catalog)
+
+#     # read labels and reserve the labeled tiles for the test set
+#     test_set = gpd.GeoDataFrame()
+#     if labels_path is not None:
+#         labels = _read_labels(labels_path, verbose)
+#         labels = labels.to_crs(tiles.crs)  # make sure same CRS is used
+
+#         # select the only labels matching the tiles timespan
+#         labels = _filter_labels(labels,
+#                                 tiles.start_datetime.min(),
+#                                 tiles.end_datetime.max())
+
+#         # add the tiles overlapping with the labels to the test set
+#         labels = labels[labels.is_valid] # remove invalid geometries
+#         mask = tiles.intersects(labels.unary_union) # boolean
+#         test_set = test_set.append(tiles[mask])
+
+#         if verbose:
+#             print("{} tiles overlap with labels: ".format(len(test_set)))
+#             for tile in test_set.index:
+#                 print(tile)
+
+#         if len(test_set) > test_set_size:
+#             raise ValueError(
+#                 "Labels overlap with {} tiles while a test set size of {} was "
+#                 "selected - please increase `test_set_size` to >= {}.".format(
+#                     len(test_set),
+#                     test_set_size,
+#                     len(test_set)
+#                 )
+#             )
+
+#         tiles = tiles[~mask]
+
+#     # pick additional unlabeled tiles for the test set
+#     test_set_unlabeled = tiles.sample(test_set_size - len(test_set),
+#                                       random_state=random_state)
+#     test_set = test_set.append(test_set_unlabeled)
+#     test_set_paths = _get_tile_paths(catalog, test_set.index, "B2-B3-B4-B11")
+
+#     train_set = tiles.index.difference(test_set_unlabeled.index)
+#     train_set = tiles.loc[train_set]
+
+#     # split validation set and training set
+#     val_set = gpd.GeoDataFrame()
+#     if validation_set_size is not None:
+#         val_set = val_set.append(
+#             train_set.sample(validation_set_size, random_state=random_state)
+#         )
+#         train_set = train_set.index.difference(val_set.index)
+#         train_set = tiles.loc[train_set]
+
+#     train_set_paths = _get_tile_paths(catalog, train_set.index, "B2-B3-B4-B11")
+#     val_set_paths = _get_tile_paths(catalog, val_set.index, "B2-B3-B4-B11")
+
+#     return train_set_paths, val_set_paths, test_set_paths
+
+
 def split_train_and_test(catalog_path, test_set_size, labels_path=None,
                          validation_set_size=None, random_state=None,
                          verbose=True):
@@ -65,7 +142,7 @@ def split_train_and_test(catalog_path, test_set_size, labels_path=None,
     :param catalog_path: STAC catalog path
     :param test_set_size: size of the test set
     :param labels_path: path to the labels. If provided, all tiles overlapping
-        with the labels will be included in the test set
+        with the labels will be included in the TRAINING set (to balance the data)
     :param validation_set_size: size of the validation set
     :param random_state: random state for the data set sampling
     :param verbose: if True, print info to stdout
@@ -75,7 +152,8 @@ def split_train_and_test(catalog_path, test_set_size, labels_path=None,
     catalog = _read_tile_catalog(catalog_path)
     tiles = _catalog_to_geodataframe(catalog)
 
-    # read labels and reserve the labeled tiles for the test set
+    # read labels and reserve the labeled tiles for the test set # Changed: use them for training set, to get a better balanced traainiing set.
+    train_set = gpd.GeoDataFrame()
     test_set = gpd.GeoDataFrame()
     if labels_path is not None:
         labels = _read_labels(labels_path, verbose)
@@ -87,34 +165,36 @@ def split_train_and_test(catalog_path, test_set_size, labels_path=None,
                                 tiles.end_datetime.max())
 
         # add the tiles overlapping with the labels to the test set
-        mask = tiles.intersects(labels.unary_union)
-        test_set = test_set.append(tiles[mask])
+        labels = labels[labels.is_valid] # remove invalid geometries
+        mask = tiles.intersects(labels.unary_union) # boolean
+        train_set = train_set.append(tiles[mask])
 
         if verbose:
-            print("{} tiles overlap with labels: ".format(len(test_set)))
-            for tile in test_set.index:
+            print("{} tiles overlap with labels: ".format(len(train_set)))
+            for tile in train_set.index:
                 print(tile)
 
-        if len(test_set) > test_set_size:
+        if len(train_set) > test_set_size:
             raise ValueError(
                 "Labels overlap with {} tiles while a test set size of {} was "
                 "selected - please increase `test_set_size` to >= {}.".format(
-                    len(test_set),
+                    len(train_set),
                     test_set_size,
-                    len(test_set)
+                    len(train_set)
                 )
             )
 
-        tiles = tiles[~mask]
+        test_tiles = tiles[~mask]
 
-    # pick additional unlabeled tiles for the test set
-    test_set_unlabeled = tiles.sample(test_set_size - len(test_set),
+    # pick additional unlabeled tiles for the test set # Chaanged: for the training set
+    train_set_unlabeled = tiles.sample(test_set_size - len(train_set),
                                       random_state=random_state)
-    test_set = test_set.append(test_set_unlabeled)
-    test_set_paths = _get_tile_paths(catalog, test_set.index, "B2-B3-B4-B11")
+    train_set = train_set.append(train_set_unlabeled)
+    
 
-    train_set = tiles.index.difference(test_set_unlabeled.index)
-    train_set = tiles.loc[train_set]
+    # test_set = tiles.index.difference(test_set_unlabeled.index)
+    test_set = test_tiles.sample(test_set_size,random_state=random_state) # pick N tiles for test set.
+    test_set = test_tiles.append(test_set)
 
     # split validation set and training set
     val_set = gpd.GeoDataFrame()
@@ -126,6 +206,7 @@ def split_train_and_test(catalog_path, test_set_size, labels_path=None,
         train_set = tiles.loc[train_set]
 
     train_set_paths = _get_tile_paths(catalog, train_set.index, "B2-B3-B4-B11")
+    test_set_paths = _get_tile_paths(catalog, test_set.index, "B2-B3-B4-B11")
     val_set_paths = _get_tile_paths(catalog, val_set.index, "B2-B3-B4-B11")
 
     return train_set_paths, val_set_paths, test_set_paths
