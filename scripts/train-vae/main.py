@@ -36,6 +36,7 @@ def parse_config(config):
     sizeStep = int(config['sizeStep'])
     #DATA
     balanceRatio = float(config['balanceRatio'])
+    file_DMGinfo = config['tiledDamagePixelsCountFile']
     normThreshold = float(config['normalizationThreshold'])
     # MODEL
     filter1 = int(config['filter1'])
@@ -72,15 +73,23 @@ def main(config=None):
     # use the ice-shelves extent as mask for the initial balancing
     mask = gpd.read_file(roiFile)
 
-    # split tiles in training, validation and test sets
+    # # split tiles in training, validation and test sets
+    # train_set_paths, val_set_paths, test_set_paths = \
+    #     tiles.split_train_and_test(
+    #         catalog_path=catPath,
+    #         test_set_size=sizeTestSet,
+    #         validation_set_size=sizeValSet,
+    #         labels_path=labPath,
+    #         random_state=42  # random state ensures same data sets for each run
+    #     )
+    # split tiles in training, validation and test sets 
     train_set_paths, val_set_paths, test_set_paths = \
         tiles.split_train_and_test(
-            catalog_path=catPath,
-            test_set_size=sizeTestSet,
-            validation_set_size=sizeValSet,
-            labels_path=labPath,
-            random_state=42  # random state ensures same data sets for each run
-        )
+                 catalog_path=catPath, 
+                 dmg_px_count_file=file_DMGinfo,  
+                 select_dmg_quantile=0.9,
+                 validation_split=0.2,
+                 random_state=42)
 
     # save dataset compositions
     path = outputDir + '/datasets_{}.json'.format(int(ts))
@@ -94,7 +103,7 @@ def main(config=None):
     test_set = dataset.Dataset(test_set_paths, sizeCutOut, bands,
                                shuffle_tiles=True,
                                norm_threshold=normThreshold,
-                               balance_ratio=balanceRatio)
+                               balance_ratio=0)
     test_set_tf = test_set.to_tf()
     test_set_tf = test_set_tf.batch(64, drop_remainder=True)
 
@@ -102,7 +111,7 @@ def main(config=None):
     val_set = dataset.Dataset(val_set_paths, sizeCutOut, bands,
                               shuffle_tiles=True,
                               norm_threshold=normThreshold,
-                              balance_ratio=balanceRatio)
+                              balance_ratio=0)
     val_set.set_mask(mask.unary_union, crs=mask.crs)
     val_set_tf = val_set.to_tf()
     val_set_tf = val_set_tf.batch(64, drop_remainder=True)
@@ -134,7 +143,7 @@ def main(config=None):
         train_set = dataset.Dataset(train_set_paths, sizeCutOut, bands,
                                     offset=offset, shuffle_tiles=True,
                                     norm_threshold=normThreshold,
-                                    balance_ratio = balanceRatio)
+                                    balance_ratio = 0)
         train_set.set_mask(mask.unary_union, crs=mask.crs)
         train_set_tf = train_set.to_tf()
         train_set_tf = train_set_tf.shuffle(buffer_size=2000000)
