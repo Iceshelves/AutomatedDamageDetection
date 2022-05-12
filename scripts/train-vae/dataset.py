@@ -88,39 +88,39 @@ class Dataset:
         )
 
 
-    def add_labels_band(tile_data, labels_path='/projects/0/einf512/labels',catalog_path='/projects/0/einf512/S2_composite_catalog'):  # [DEV]
+#     def add_labels_band(tile_data, labels_path='/projects/0/einf512/labels',catalog_path='/projects/0/einf512/S2_composite_catalog'):  # [DEV]
 
-        # --- [DOUBLE WORK same as in tiles.py; put it somewhere else] ----
-        # read tile catalog
-        catalog = tiles._read_tile_catalog(catalog_path)
-        tiles_all = tiles._catalog_to_geodataframe(catalog)
+#         # --- [DOUBLE WORK same as in tiles.py; put it somewhere else] ----
+#         # read tile catalog
+#         catalog = tiles._read_tile_catalog(catalog_path)
+#         tiles_all = tiles._catalog_to_geodataframe(catalog)
 
-        # load labels for the dataset [DUBBEL WERK; al in tiles.py]
-        labels = tiles._read_labels(labels_path, verbose=True)
-        labels = labels.to_crs(tiles.crs)  # make sure same CRS is used
-        # select labels matching the tiles timespan
-        labels = tiles._filter_labels(labels,
-                                tiles_all.start_datetime.min(),
-                                tiles_all.start_datetime.min())
-        # --- [DOUBLE WORK (end)]  ----
+#         # load labels for the dataset [DUBBEL WERK; al in tiles.py]
+#         labels = tiles._read_labels(labels_path, verbose=True)
+#         labels = labels.to_crs(tiles.crs)  # make sure same CRS is used
+#         # select labels matching the tiles timespan
+#         labels = tiles._filter_labels(labels,
+#                                 tiles_all.start_datetime.min(),
+#                                 tiles_all.start_datetime.min())
+#         # --- [DOUBLE WORK (end)]  ----
 
-        # create label as raster
-        label_polys = gpd.GeoSeries(labels.geometry,crs=labels.crs) # Combine all geometries to one GeoSeries, with the correct projection; s = s.to_crs(...)
-        label_raster = geometry_mask(label_polys,out_shape=(len(tile_data.y),len(tile_data.x)),transform=tile_data.rio.transform(),invert=True)
-        # Inspect data type of mask -> ndarray
-        label_raster = np.expand_dims(label_raster,axis=0)
-        label_raster = label_raster.astype(np.dtype('uint16'))
-        # return label_raster
+#         # create label as raster
+#         label_polys = gpd.GeoSeries(labels.geometry,crs=labels.crs) # Combine all geometries to one GeoSeries, with the correct projection; s = s.to_crs(...)
+#         label_raster = geometry_mask(label_polys,out_shape=(len(tile_data.y),len(tile_data.x)),transform=tile_data.rio.transform(),invert=True)
+#         # Inspect data type of mask -> ndarray
+#         label_raster = np.expand_dims(label_raster,axis=0)
+#         label_raster = label_raster.astype(np.dtype('uint16'))
+#         # return label_raster
 
-        # add labelraster to tile
-        tile_data_np = tile_data.values
-        # tile_data_np = np.concatenate((tile_data_np[0:3],labels_raster));
-        tile_data_np = np.concatenate((tile_data_np,labels_raster));
+#         # add labelraster to tile
+#         tile_data_np = tile_data.values
+#         # tile_data_np = np.concatenate((tile_data_np[0:3],labels_raster));
+#         tile_data_np = np.concatenate((tile_data_np,labels_raster));
 
-        tile = xr.DataArray(data=tile_data_np,dims=['band','y','x'],
-                            coords={ #'band':tile_data.coords['band'],
-                                    'y':tile_data[0].coords['y'],'x':tile_data[0].coords['x']})
-        return tile
+#         tile = xr.DataArray(data=tile_data_np,dims=['band','y','x'],
+#                             coords={ #'band':tile_data.coords['band'],
+#                                     'y':tile_data[0].coords['y'],'x':tile_data[0].coords['x']})
+#         return tile
 
     def _generate_cutouts(self):
         """
@@ -143,8 +143,8 @@ class Dataset:
                                  all_touched=self.all_touched)
 
             # TO DO: add labels as new band (for balancing)
-            if self.balance_ratio >0:
-                da = add_labels_band(da)
+            # if self.balance_ratio >0:
+            #     da = add_labels_band(da)
 
             # apply offset
             da = da.shift(x=self.offset, y=self.offset)
@@ -161,37 +161,37 @@ class Dataset:
 
             # balance the ratio of labelled/unlabelled windows
             #   balance_ratio = N_labelled / N_unlabelled  (0 = no blancing, 1 = equal balance)
-            if self.balance_ratio > 0:
+#             if self.balance_ratio > 0:
 
-                # TO DO: make sure labels are included as a band in the DA
-                # tile_cutouts = da
+#                 # TO DO: make sure labels are included as a band in the DA
+#                 # tile_cutouts = da
 
-                idx_labels = da.isel(band=-1) == 1   # all labelled pixels (labels are added as last band)
-                labelled_windows = idx_labels.sum(('x_win','y_win')) > 0 # boolean: identify all windows that have at least one labelled
+#                 idx_labels = da.isel(band=-1) == 1   # all labelled pixels (labels are added as last band)
+#                 labelled_windows = idx_labels.sum(('x_win','y_win')) > 0 # boolean: identify all windows that have at least one labelled
 
-                # separate labelled and unlabelled windows
-                cutouts_label_1 = da.isel(sample=labelled_windows.values) # labelled
-                cutouts_label_0 = da.isel(sample=~labelled_windows.values)# unlabelled
+#                 # separate labelled and unlabelled windows
+#                 cutouts_label_1 = da.isel(sample=labelled_windows.values) # labelled
+#                 cutouts_label_0 = da.isel(sample=~labelled_windows.values)# unlabelled
 
-                N_label_1 = cutouts_label_1.isel(band=0,x_win=0,y_win=0).shape[0] # number of labelled windows (band=0 could be any band)
-                N_label_0 = int(1/self.balance_ratio * N_label_1) # number of unlabelled windows dependingn on balance ratio
+#                 N_label_1 = cutouts_label_1.isel(band=0,x_win=0,y_win=0).shape[0] # number of labelled windows (band=0 could be any band)
+#                 N_label_0 = int(1/self.balance_ratio * N_label_1) # number of unlabelled windows dependingn on balance ratio
 
-                # # select the windows according to the ratio
-                # # TO DO: select windows in a random order
-                data_train_label_1 = cutouts_label_1.isel(sample=np.arange(N_label_1))
-                data_train_label_0 = cutouts_label_0.isel(sample=np.arange(N_label_0))
+#                 # # select the windows according to the ratio
+#                 # # TO DO: select windows in a random order
+#                 data_train_label_1 = cutouts_label_1.isel(sample=np.arange(N_label_1))
+#                 data_train_label_0 = cutouts_label_0.isel(sample=np.arange(N_label_0))
 
-                da = xr.concat((data_train_label_1,data_train_label_0),dim='sample')
+#                 da = xr.concat((data_train_label_1,data_train_label_0),dim='sample')
 
 
-            # select bands (also removes previously added label-band)
+            # select bands
             if self.bands is not None:
                 if type(self.bands) is not list:
                     da = da.sel(band=[self.bands])
                 else:
                     da = da.sel(band=self.bands)
-            elif self.balance_ratio > 0: # remove added label-band
-                da = da.sel(band=list(range(da.sizes['band']-1)) )
+            # elif self.balance_ratio > 0: # remove added label-band
+            #     da = da.sel(band=list(range(da.sizes['band']-1)) )
 
             # normalize
             if self.norm_threshold is not None:
