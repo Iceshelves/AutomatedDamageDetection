@@ -35,7 +35,7 @@ def parse_config(config):
     nEpochMax = int(config['nEpochMax'])
     sizeStep = int(config['sizeStep'])
     #DATA
-    balanceRatio = float(config['balanceRatio'])
+    # balanceRatio = float(config['balanceRatio'])
     file_DMGinfo = config['tiledDamagePixelsCountFile']
     normThreshold = float(config['normalizationThreshold'])
     # MODEL
@@ -50,7 +50,7 @@ def parse_config(config):
 #     validationSplit = float(config['validationSplit'])
 
     return (catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile,
-            bands, sizeCutOut, nEpochMax, sizeStep, balanceRatio, normThreshold,
+            bands, sizeCutOut, nEpochMax, sizeStep, file_DMGinfo, normThreshold,
             filter1, filter2, kernelSize, denseSize, latentDim,
             alpha, batchSize)
 
@@ -60,7 +60,7 @@ def main(config=None):
     # parse input arguments
     config = config if config is not None else "train-vae.ini"
     catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile, bands, \
-        sizeCutOut, nEpochmax, sizeStep, balanceRatio, normThreshold, \
+        sizeCutOut, nEpochmax, sizeStep, file_DMGinfo, normThreshold, \
         filter1, filter2, kernelSize, denseSize, latentDim, \
         alpha, batchSize = parse_config(config)
 
@@ -82,6 +82,7 @@ def main(config=None):
     #         labels_path=labPath,
     #         random_state=42  # random state ensures same data sets for each run
     #     )
+    
     # split tiles in training, validation and test sets 
     train_set_paths, val_set_paths, test_set_paths = \
         tiles.split_train_and_test(
