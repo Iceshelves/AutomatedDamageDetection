@@ -242,8 +242,10 @@ def split_train_and_test(catalog_path,
     
     # read the dmg-indicator file for all tiles
     train_set = gpd.GeoDataFrame()
-    if dmg_px_count_file is not None: # dmg file: "RAMP_tiled_dmg_px_count.pkl"
-        tiled_dmg_px_count = pd.read_pickle(dmg_px_count_file)
+    if dmg_px_count_file is not None: # dmg file: "RAMP_tiled_dmg_px_count .pkl or .csv"
+        # tiled_dmg_px_count = pd.read_pickle(dmg_px_count_file)
+        tiled_dmg_px_count = pd.read_csv(dmg_px_count_file, index_col=0) 
+        print(tiled_dmg_px_count)
 
         # select tiles with most damage
         df_mask= tiled_dmg_px_count['Dmg_px_count']>=tiled_dmg_px_count['Dmg_px_count'].quantile( select_dmg_quantile )
@@ -251,19 +253,20 @@ def split_train_and_test(catalog_path,
         tile_nums_heavydmg = tiles_heavydmg['Tile_Num'].values # array with strings 'N'
         
         for tile_N in tile_nums_heavydmg:
-            tile_N = 'tile_' + tile_N   # add prefix to string to differentiate number '10' from '100' and '110' etc
+            # tile_N = 'tile_' + tile_N   # add prefix to string to differentiate number '10' from '100' and '110' etc
+            tile_N = 'tile_' + str(tile_N)
             corresponding_file = [file  for file in tilelist if file.endswith(tile_N) ]
             
             # add to train_set
             train_set = pd.concat([train_set, tiles.loc[corresponding_file]])
             
-    else: # no dmg information (for balance), choose random tiles
+    elif dmg_px_count_file is None: # no dmg information (for balance), choose random tiles
         train_set_size = int(0.7*len(tiles)) # get 70% of all tiles for training
         train_set = tiles.sample( train_set_size , random_state=random_state)
     
     # select testing data: tiles that are not selected for train/val              
     test_set = tiles.index.difference(train_set.index) 
-    test_set = tiles_gdf.loc[tiles_remain] 
+    test_set = tiles.loc[test_set] 
     test_set_paths = _get_tile_paths(catalog, test_set.index, "B2-B3-B4-B11")                      
   
     # split train_set in training & validation set
@@ -271,7 +274,7 @@ def split_train_and_test(catalog_path,
     
     if validation_split > 0.5: # revise ratio: training:validation should be ~80:20 (corresponds to validation_split=0.2) 
         validation_split = 1-validation_split
-    validation_set_size = int(validation_split * len(train_set ) # round to nearest int
+    validation_set_size = int(validation_split * len(train_set ) ) # round to nearest int
     
     val_set = pd.concat([val_set, 
                          train_set.sample( validation_set_size, random_state=random_state)] )
