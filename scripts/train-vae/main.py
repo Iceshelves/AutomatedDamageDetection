@@ -30,10 +30,12 @@ def parse_config(config):
     sizeTestSet = int(config['sizeTestSet'])
     sizeValSet = int(config['sizeValidationSet'])
     roiFile = config['ROIFile']
+    #
     bands = [int(i) for i in config['bands'].split(" ")]
     sizeCutOut = int(config['sizeCutOut'])
     nEpochMax = int(config['nEpochMax'])
     sizeStep = int(config['sizeStep'])
+    stride = int(config['stride'])
     #DATA
     # balanceRatio = float(config['balanceRatio'])
     file_DMGinfo = config['tiledDamagePixelsCountFile']
@@ -41,8 +43,9 @@ def parse_config(config):
     # MODEL
     filter1 = int(config['filter1'])
     filter2 = int(config['filter2'])
-    kernelSize = int(config['kernelSize'])
-    denseSize = int(config['sizeCutOut'])
+    kernelSize1 = int(config['kernelSize1'])
+    kernelSize2 = int(config['kernelSize2'])
+    denseSize = int(config['denseSize'])
     latentDim = int(config['latentDim'])
     #vae:
     alpha = 5
@@ -50,8 +53,8 @@ def parse_config(config):
 #     validationSplit = float(config['validationSplit'])
 
     return (catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile,
-            bands, sizeCutOut, nEpochMax, sizeStep, file_DMGinfo, normThreshold,
-            filter1, filter2, kernelSize, denseSize, latentDim,
+            bands, sizeCutOut, nEpochMax, sizeStep, stride, file_DMGinfo, normThreshold,
+            filter1, filter2, kernelSize1,kernelSize2, denseSize, latentDim,
             alpha, batchSize)
 
 
@@ -60,8 +63,8 @@ def main(config=None):
     # parse input arguments
     config = config if config is not None else "train-vae.ini"
     catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile, bands, \
-        sizeCutOut, nEpochmax, sizeStep, file_DMGinfo, normThreshold, \
-        filter1, filter2, kernelSize, denseSize, latentDim, \
+        sizeCutOut, nEpochmax, sizeStep, stride, file_DMGinfo, normThreshold, \
+        filter1, filter2, kernelSize1, kernelSize2, denseSize, latentDim, \
         alpha, batchSize = parse_config(config)
 
 
@@ -103,16 +106,14 @@ def main(config=None):
     # is a preselection step across all data
     test_set = dataset.Dataset(test_set_paths, sizeCutOut, bands,
                                shuffle_tiles=True,
-                               norm_threshold=normThreshold,
-                               balance_ratio=0)
+                               norm_threshold=normThreshold)
     test_set_tf = test_set.to_tf()
     test_set_tf = test_set_tf.batch(64, drop_remainder=True)
 
     # balanced validation set (i.e. apply mask)
     val_set = dataset.Dataset(val_set_paths, sizeCutOut, bands,
                               shuffle_tiles=True,
-                              norm_threshold=normThreshold,
-                              balance_ratio=0)
+                              norm_threshold=normThreshold)
     val_set.set_mask(mask.unary_union, crs=mask.crs)
     val_set_tf = val_set.to_tf()
     val_set_tf = val_set_tf.batch(64, drop_remainder=True)
@@ -127,9 +128,12 @@ def main(config=None):
 
     encoder_inputs, encoder, z, z_mean, z_log_var = VAE.make_encoder(
                             sizeCutOut,len(bands),
-                            filter1,kernelSize,
-                            filter2,denseSize,latentDim)
-    decoder = VAE.make_decoder(latentDim,filter1,filter2,kernelSize)
+                            filter1,filter2,
+                            kernelSize1,kernelSize2,
+                            denseSize,latentDim)
+    decoder = VAE.make_decoder(latentDim,encoder,
+                               filter1,filter2,
+                               kernelSize1,kernelSize2)
     vae = VAE.make_vae(encoder_inputs, z, z_mean, z_log_var, decoder,alpha)
     vae.compile(optimizer=keras.optimizers.Adam())
 
@@ -142,9 +146,10 @@ def main(config=None):
         offset = (epochcounter - 1)*sizeStep
 
         train_set = dataset.Dataset(train_set_paths, sizeCutOut, bands,
-                                    offset=offset, shuffle_tiles=True,
-                                    norm_threshold=normThreshold,
-                                    balance_ratio = 0)
+                                    offset=offset, 
+                                    stride=stride,
+                                    shuffle_tiles=True,
+                                    norm_threshold=normThreshold)
         train_set.set_mask(mask.unary_union, crs=mask.crs)
         train_set_tf = train_set.to_tf()
         train_set_tf = train_set_tf.shuffle(buffer_size=2000000)

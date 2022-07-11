@@ -34,10 +34,15 @@ class Sampling(layers.Layer):
 
 # ### Build encoder
 
-def make_encoder(cutout_size,n_bands,filter_1,kernel_size,filter_2,dense_size,latent_dim):    
+def make_encoder(cutout_size,n_bands,
+                 filter_1,filter_2,
+                 kernel_size_1,kernel_size_2,
+                 dense_size,latent_dim):    
     encoder_inputs = keras.Input(shape=(cutout_size, cutout_size,n_bands)) # enter cut-out shape (20,20,3)
-    x = layers.Conv2D(filter_1, kernel_size, activation="relu", strides=2, padding="same")(encoder_inputs)
-    x = layers.Conv2D(filter_2, kernel_size, activation="relu", strides=2, padding="same")(x)
+    x = layers.Conv2D(filter_1, kernel_size_1, activation="relu", strides=2, padding="same")(encoder_inputs)
+    x = layers.Conv2D(filter_2, kernel_size_2, activation="relu", strides=2, padding="same")(x)
+    # add a third layer (not sure if that makes sense)
+    x = layers.Conv2D(filter_2, kernel_size_2, activation="relu", strides=1, padding="same")(x)
     x = layers.Flatten()(x) # to vector
     x = layers.Dense(dense_size, activation="relu")(x) # linked layer
     z_mean = layers.Dense(latent_dim, name="z_mean")(x)
@@ -50,12 +55,18 @@ def make_encoder(cutout_size,n_bands,filter_1,kernel_size,filter_2,dense_size,la
 
 # ### Build decoder
 
-def make_decoder(latent_dim,filter_1,filter_2,kernel_size): 
+def make_decoder(latent_dim,encoder,
+                 filter_1,filter_2,
+                 kernel_size_1,kernel_size_2): 
     latent_inputs = keras.Input(shape=(latent_dim,))
-    x = layers.Dense(5 * 5 * filter_2, activation="relu")(latent_inputs) # -- shape corresponding to encoder
-    x = layers.Reshape((5, 5, filter_2))(x)
-    x = layers.Conv2DTranspose(filter_2, kernel_size, activation="relu", strides=2, padding="same")(x)
-    x = layers.Conv2DTranspose(filter_1, kernel_size, activation="relu", strides=2, padding="same")(x)
+    # get shape of last layer in encoder before flattning
+    flat_layer = [layer for layer in encoder.layers if 'flatten' in layer.name] 
+    flat_input = flat_layer[-1].input_shape # input shape of flat layer to be used to reconstruct; (None, 5,5,16) or smth
+    x = layers.Dense(flat_input[1] * flat_input[2] * filter_2, activation="relu")(latent_inputs) # -- shape corresponding to encoder
+    x = layers.Reshape((flat_input[1], flat_input[2], filter_2))(x)
+    x = layers.Conv2DTranspose(filter_2, kernel_size_2, activation="relu", strides=1, padding="same")(x)
+    x = layers.Conv2DTranspose(filter_2, kernel_size_2, activation="relu", strides=2, padding="same")(x)
+    x = layers.Conv2DTranspose(filter_1, kernel_size_1, activation="relu", strides=2, padding="same")(x)
     decoder_outputs = layers.Conv2DTranspose(3, 3, activation="sigmoid", padding="same")(x) # (1,3) or (3,3)
     decoder = keras.Model(latent_inputs, decoder_outputs, name="decoder")
     decoder.summary()
