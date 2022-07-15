@@ -36,8 +36,8 @@ class Dataset:
             if shuffle_tiles else tile_list[:_num_tiles]
         if offset >= cutout_size:
             raise ValueError(
-                "offset larger than window size - set "
-                "offset to {}".format(cutout_size % offset)
+                "offset ({}) larger than window size ({}) - set "
+                "offset to {}".format(offset,cutout_size,cutout_size % offset)
             )
         self.offset = offset
         self.balance_ratio = balance_ratio
