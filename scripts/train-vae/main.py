@@ -66,7 +66,13 @@ def main(config=None):
         sizeCutOut, nEpochmax, sizeStep, stride, file_DMGinfo, normThreshold, \
         filter1, filter2, kernelSize1, kernelSize2, denseSize, latentDim, \
         alpha, batchSize = parse_config(config)
-
+    n_train_epochs = 1; # TO DO: add to config
+    
+    # # to do: implement training approach
+    # if epoch_type == 'data_epoch': # TO DO: add to config
+    #     # loop all data once before next epoch
+    #     n_train_epochs = 1; # TO DO: add to config
+    # elif epoch_type == 'train_epoch'
 
     # using datetime module for naming the current model, so that old models
     # do not get overwritten
@@ -144,6 +150,8 @@ def main(config=None):
     # begin loop
     while epochcounter < nEpochmax:
         offset = (epochcounter - 1)*sizeStep
+        while offset >= sizeCutOut: # add offset correction for when offset >= window_size
+            offset = offset - sizeCutOut 
 
         train_set = dataset.Dataset(train_set_paths, sizeCutOut, bands,
                                     offset=offset, 
@@ -155,11 +163,7 @@ def main(config=None):
         train_set_tf = train_set_tf.shuffle(buffer_size=2000000)
         train_set_tf = train_set_tf.batch(64, drop_remainder=True)
 
-#         vae = keras.models.load_model(
-#             os.path.join(path, 'epoch_' + str(epochcounter - 1))
-#         )
-
-        history = vae.fit(train_set_tf, epochs=1, validation_data=val_set_tf)
+        history = vae.fit(train_set_tf, epochs=n_train_epochs, validation_data=val_set_tf)
 #         history = vae.fit(x_train, epochs=1, batch_size=batch_size, validation_split=train_val_split) # validatio_split does not work because we loop all data every epoch (and then its not independent validatoin data)
 
         # change it: make a call to os to create a path
