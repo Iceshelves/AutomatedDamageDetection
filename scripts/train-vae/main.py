@@ -51,12 +51,13 @@ def parse_config(config):
     batchSize = int(config['batchSize'])
     nEpochMax = int(config['nEpochData'])
     nEpochTrain = int(config['nEpochTrain'])
+    learnRate = int(config['learningRate'])
 #     validationSplit = float(config['validationSplit'])
 
     return (catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile,
             bands, sizeCutOut, nEpochMax, nEpochTrain, sizeStep, stride, file_DMGinfo, normThreshold,
             filter1, filter2, kernelSize1,kernelSize2, denseSize, latentDim,
-            alpha, batchSize)
+            alpha, batchSize,learnRate)
 
 
 def main(config=None):
@@ -66,7 +67,7 @@ def main(config=None):
     catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile, bands, \
         sizeCutOut, nEpochmax, nEpochTrain, sizeStep, stride, file_DMGinfo, normThreshold, \
         filter1, filter2, kernelSize1, kernelSize2, denseSize, latentDim, \
-        alpha, batchSize = parse_config(config)
+        alpha, batchSize,learnRate = parse_config(config)
     
     # # to do: implement training approach
     # if epoch_type == 'data_epoch': # TO DO: add to config
@@ -141,7 +142,7 @@ def main(config=None):
                                filter1,filter2,
                                kernelSize1,kernelSize2)
     vae = VAE.make_vae(encoder_inputs, z, z_mean, z_log_var, decoder,alpha)
-    vae.compile(optimizer=keras.optimizers.Adam(learning_rate=0.001)) # default l.rate = 0.001
+    vae.compile(optimizer=keras.optimizers.Adam(learning_rate=learnRate)) # default l.rate = 0.001
 
     path = outputDir + '/model_' + str(int(ts))
     vae.save(os.path.join(path, 'epoch_' + str(epochcounter - 1)))
