@@ -93,12 +93,17 @@ def make_vae(encoder_inputs, z, z_mean, z_log_var, decoder,alpha=5):
     kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
     kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
 
-#     alpha = 5
-
     # Play witht different alpha: -2, 0 , 1 ,2 ; 0.2 ; -0.5 ; 50
-    # alpha = 10.; 
-    total_loss = reconstruction_loss +  alpha * kl_loss # alpha is custom
-    vae.add_loss(total_loss)
+    
+    # total_loss = reconstruction_loss +  alpha * kl_loss # alpha is custom
+    # vae.add_loss(total_loss)
+    
+    vae.add_loss(reconstruction_loss)
+    vae.add_loss(kl_loss)
+
+    vae.add_metric(kl_loss, name='kl_loss', aggregation='mean')
+    vae.add_metric(reconstruction_loss, name='rconstr_loss', aggregation='mean')
+    
     return vae
     
 
