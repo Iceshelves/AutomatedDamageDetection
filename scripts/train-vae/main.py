@@ -141,7 +141,7 @@ def main(config=None):
                                filter1,filter2,
                                kernelSize1,kernelSize2)
     vae = VAE.make_vae(encoder_inputs, z, z_mean, z_log_var, decoder,alpha)
-    vae.compile(optimizer=keras.optimizers.Adam())
+    vae.compile(optimizer=keras.optimizers.Adam(learning_rate=0.001)) # default l.rate = 0.001
 
     path = outputDir + '/model_' + str(int(ts))
     vae.save(os.path.join(path, 'epoch_' + str(epochcounter - 1)))
