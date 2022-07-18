@@ -148,7 +148,7 @@ def main(config=None):
     encoder.save(os.path.join(path, 'encoder_epoch_' + str(epochcounter - 1) ))
 
     # begin loop
-    while epochcounter < nEpochmax:
+    while epochcounter <= nEpochmax:
         offset = (epochcounter - 1)*sizeStep
         while offset >= sizeCutOut: # add offset correction for when offset >= window_size
             offset = offset - sizeCutOut 
@@ -160,11 +160,14 @@ def main(config=None):
                                     norm_threshold=normThreshold)
         train_set.set_mask(mask.unary_union, crs=mask.crs)
         train_set_tf = train_set.to_tf()
-        train_set_tf = train_set_tf.shuffle(buffer_size=2000000)
+        # train_set_tf = train_set_tf.shuffle(buffer_size=2000000)
         train_set_tf = train_set_tf.batch(64, drop_remainder=True)
 
         history = vae.fit(train_set_tf, epochs=nEpochTrain, validation_data=val_set_tf)
 #         history = vae.fit(x_train, epochs=1, batch_size=batch_size, validation_split=train_val_split) # validatio_split does not work because we loop all data every epoch (and then its not independent validatoin data)
+
+        # print('Total loss: {} \n Reconstructiion loss: {} \n K-loss: {}'.format(total_loss, reconstruction_loss, kl_loss)) #
+        print('losses: {}'.format(vae.losses) )
 
         # change it: make a call to os to create a path
         vae.save(os.path.join(path, 'model_epoch_' + str(epochcounter)))
