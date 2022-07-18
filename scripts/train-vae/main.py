@@ -47,11 +47,11 @@ def parse_config(config):
     denseSize = int(config['denseSize'])
     latentDim = int(config['latentDim'])
     #vae:
-    alpha = 5
+    alpha = float(config['alpha'])
     batchSize = int(config['batchSize'])
     nEpochMax = int(config['nEpochData'])
     nEpochTrain = int(config['nEpochTrain'])
-    learnRate = int(config['learningRate'])
+    learnRate = float(config['learningRate'])
 #     validationSplit = float(config['validationSplit'])
 
     return (catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile,
