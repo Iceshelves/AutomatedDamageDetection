@@ -33,7 +33,6 @@ def parse_config(config):
     #
     bands = [int(i) for i in config['bands'].split(" ")]
     sizeCutOut = int(config['sizeCutOut'])
-    nEpochMax = int(config['nEpochMax'])
     sizeStep = int(config['sizeStep'])
     stride = int(config['stride'])
     #DATA
@@ -50,10 +49,12 @@ def parse_config(config):
     #vae:
     alpha = 5
     batchSize = int(config['batchSize'])
+    nEpochMax = int(config['nEpochData'])
+    nEpochTrain = int(config['nEpochTrain'])
 #     validationSplit = float(config['validationSplit'])
 
     return (catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile,
-            bands, sizeCutOut, nEpochMax, sizeStep, stride, file_DMGinfo, normThreshold,
+            bands, sizeCutOut, nEpochMax, nEpochTrain, sizeStep, stride, file_DMGinfo, normThreshold,
             filter1, filter2, kernelSize1,kernelSize2, denseSize, latentDim,
             alpha, batchSize)
 
@@ -63,10 +64,9 @@ def main(config=None):
     # parse input arguments
     config = config if config is not None else "train-vae.ini"
     catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile, bands, \
-        sizeCutOut, nEpochmax, sizeStep, stride, file_DMGinfo, normThreshold, \
+        sizeCutOut, nEpochmax, nEpochTrain, sizeStep, stride, file_DMGinfo, normThreshold, \
         filter1, filter2, kernelSize1, kernelSize2, denseSize, latentDim, \
         alpha, batchSize = parse_config(config)
-    n_train_epochs = 1; # TO DO: add to config
     
     # # to do: implement training approach
     # if epoch_type == 'data_epoch': # TO DO: add to config
@@ -163,7 +163,7 @@ def main(config=None):
         train_set_tf = train_set_tf.shuffle(buffer_size=2000000)
         train_set_tf = train_set_tf.batch(64, drop_remainder=True)
 
-        history = vae.fit(train_set_tf, epochs=n_train_epochs, validation_data=val_set_tf)
+        history = vae.fit(train_set_tf, epochs=nEpochTrain, validation_data=val_set_tf)
 #         history = vae.fit(x_train, epochs=1, batch_size=batch_size, validation_split=train_val_split) # validatio_split does not work because we loop all data every epoch (and then its not independent validatoin data)
 
         # change it: make a call to os to create a path
