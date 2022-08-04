@@ -240,12 +240,28 @@ def split_train_and_test(catalog_path,
     tiles = _catalog_to_geodataframe(catalog) # gpd f
     tilelist = tiles.index.values.tolist()    # tilenames in list (excluding .tif)
     
+    # remove ROI tiles from tilelist, before dividing training/test/val
+    tileNums_test_ROI = [112,122,126,139,140,141,142,143,151,152,153,154]
+    tilelist_ROI = [item for item in tilelist if int(item.split('_')[-1]) in tileNums_test_ROI]
+    # make SET from ROI tiles
+    ROI_set = tiles.loc[tilelist_ROI]
+    # remove these from tilelist
+    tiles_set = tiles.index.difference(tilelist_ROI) 
+    tiles_set = tiles.loc[tiles_set]
+    tiles = tiles_set
+    
+    
     # read the dmg-indicator file for all tiles
     train_set = gpd.GeoDataFrame()
     if dmg_px_count_file is not None: # dmg file: "RAMP_tiled_dmg_px_count .pkl or .csv"
         # tiled_dmg_px_count = pd.read_pickle(dmg_px_count_file)
         tiled_dmg_px_count = pd.read_csv(dmg_px_count_file, index_col=0) 
         print(tiled_dmg_px_count)
+        
+        # remove tiles that are in test_ROI also from DMG count
+        ROI_tiles = [True if item not in tileNums_test_ROI else False for item in tiled_dmg_px_count['Tile_Num'].values] # TRUE if tile can be kept, FALSE if
+        tiled_dmg_px_count = tiled_dmg_px_count[ROI_tiles]
+        
 
         # select tiles with most damage
         df_mask= tiled_dmg_px_count['Dmg_px_count']>=tiled_dmg_px_count['Dmg_px_count'].quantile( select_dmg_quantile )
