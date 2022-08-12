@@ -57,7 +57,7 @@ def make_encoder(cutout_size,n_bands,
 
 def make_decoder(latent_dim,encoder,
                  filter_1,filter_2,
-                 kernel_size_1,kernel_size_2
+                 kernel_size_1,kernel_size_2,
                  n_bands): 
     latent_inputs = keras.Input(shape=(latent_dim,))
     # get shape of last layer in encoder before flattning
