@@ -195,8 +195,18 @@ class Dataset:
 
             # normalize
             if self.norm_threshold is not None:
-                da = (da + 0.1) / (self.norm_threshold + 1)
-                da = da.clip(max=1)
+                # da = (da + 0.1) / (self.norm_threshold + 1) # normalises to [0 1] using  v_max= norm_threshold nd v_min=0, but with a small addition to omit 0/x
+                # da = da.clip(max=1)
+                if len(self.norm_threshold) ==1:
+                    norm_min=0
+                    norm_max=self.norm_threshold
+                elif len(self.norm_threshold) == 2:
+                    norm_min, norm_max = self.norm_threshold
+                    
+                # normliise using norm_min nd norm_max values
+                da = (da - norm_min) / (norm_max - norm_min)
+                da = da.clip(min=0,max=1)
+                print('Normalised to {:.1f}-{:.1f}'.format(da.min().values, da.max().values) )
 
             yield (
                 da.sample.coords['x'],
