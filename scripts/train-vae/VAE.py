@@ -57,7 +57,8 @@ def make_encoder(cutout_size,n_bands,
 
 def make_decoder(latent_dim,encoder,
                  filter_1,filter_2,
-                 kernel_size_1,kernel_size_2): 
+                 kernel_size_1,kernel_size_2
+                 n_bands): 
     latent_inputs = keras.Input(shape=(latent_dim,))
     # get shape of last layer in encoder before flattning
     flat_layer = [layer for layer in encoder.layers if 'flatten' in layer.name] 
@@ -67,7 +68,7 @@ def make_decoder(latent_dim,encoder,
     x = layers.Conv2DTranspose(filter_2, kernel_size_2, activation="relu", strides=1, padding="same")(x)
     x = layers.Conv2DTranspose(filter_2, kernel_size_2, activation="relu", strides=2, padding="same")(x)
     x = layers.Conv2DTranspose(filter_1, kernel_size_1, activation="relu", strides=2, padding="same")(x)
-    decoder_outputs = layers.Conv2DTranspose(3, 3, activation="sigmoid", padding="same")(x) # (1,3) or (3,3)
+    decoder_outputs = layers.Conv2DTranspose(n_bands, n_bands, activation="sigmoid", padding="same")(x) # (1,3) or (3,3)
     decoder = keras.Model(latent_inputs, decoder_outputs, name="decoder")
     decoder.summary()
     return decoder

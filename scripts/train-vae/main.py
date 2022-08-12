@@ -140,7 +140,8 @@ def main(config=None):
                             denseSize,latentDim)
     decoder = VAE.make_decoder(latentDim,encoder,
                                filter1,filter2,
-                               kernelSize1,kernelSize2)
+                               kernelSize1,kernelSize2,
+                               len(bands))
     vae = VAE.make_vae(encoder_inputs, z, z_mean, z_log_var, decoder,alpha)
     vae.compile(optimizer=keras.optimizers.Adam(learning_rate=learnRate)) # default l.rate = 0.001
 
