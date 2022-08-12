@@ -241,10 +241,10 @@ def split_train_and_test(catalog_path,
     tilelist = tiles.index.values.tolist()    # tilenames in list (excluding .tif)
     
     # remove ROI tiles from tilelist, before dividing training/test/val
-    tileNums_test_ROI = [112,122,126,139,140,141,142,143,151,152,153,154]
-    tilelist_ROI = [item for item in tilelist if int(item.split('_')[-1]) in tileNums_test_ROI]
+    tileNums_test_ROI = [112,122,126,139,140,141,142,143,151,152,153,154] # to do: include in config file
+    tilelist_ROI = [item for item in tilelist if int(item.split('_')[-1]) in tileNums_test_ROI] 
     # make SET from ROI tiles
-    ROI_set = tiles.loc[tilelist_ROI]
+    ROI_set = tiles.loc[tilelist_ROI] # to do: include this in stored dataset.json 
     # remove these from tilelist
     tiles_set = tiles.index.difference(tilelist_ROI) 
     tiles_set = tiles.loc[tiles_set]
