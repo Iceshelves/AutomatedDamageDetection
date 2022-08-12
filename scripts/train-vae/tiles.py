@@ -40,9 +40,12 @@ def _read_labels(labels_path, verbose=True):
     return labels
 
 
-def _get_tile_paths(catalog, item_ids, asset_key):
+def _get_tile_paths(catalog, item_ids, asset_key=None):
     """ Extract the asset paths from the catalog """
     items = (catalog.get_item(item_id, recursive=True) for item_id in item_ids)
+    if asset_key is None:
+        item = list(catalog.get_all_items())[0]
+        asset_key = list(item.assets.keys())[0]
     assets = (item.assets[asset_key] for item in items)
     return [asset.get_absolute_href() for asset in assets]
 
@@ -236,7 +239,7 @@ def split_train_and_test(catalog_path,
 
     
     # read tile catalog
-    catalog = _read_tile_catalog(catalog_path)
+    catalog = _read_tile_catalog(catalog_path) 
     tiles = _catalog_to_geodataframe(catalog) # gpd f
     tilelist = tiles.index.values.tolist()    # tilenames in list (excluding .tif)
     
@@ -283,7 +286,7 @@ def split_train_and_test(catalog_path,
     # select testing data: tiles that are not selected for train/val              
     test_set = tiles.index.difference(train_set.index) 
     test_set = tiles.loc[test_set] 
-    test_set_paths = _get_tile_paths(catalog, test_set.index, "B2-B3-B4-B11")                      
+    test_set_paths = _get_tile_paths(catalog, test_set.index)#, "B2-B3-B4-B11")                      
   
     # split train_set in training & validation set
     val_set = gpd.GeoDataFrame()
@@ -298,8 +301,8 @@ def split_train_and_test(catalog_path,
     train_set = train_set.index.difference(val_set.index)
     train_set = tiles.loc[train_set]
 
-    train_set_paths = _get_tile_paths(catalog, train_set.index, "B2-B3-B4-B11")
-    val_set_paths = _get_tile_paths(catalog, val_set.index, "B2-B3-B4-B11")    
+    train_set_paths = _get_tile_paths(catalog, train_set.index)#, "B2-B3-B4-B11")
+    val_set_paths = _get_tile_paths(catalog, val_set.index)#, "B2-B3-B4-B11")    
         
     if verbose:
         print("{} high-dmg tiles selected for training: ".format(len(train_set) ) )
