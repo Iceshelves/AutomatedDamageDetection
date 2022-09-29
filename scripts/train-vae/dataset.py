@@ -5,7 +5,7 @@ import geopandas as gpd
 import rioxarray as rioxr
 import tensorflow as tf
 import tiles
-
+from skimage import exposure as skimage_exposure
 
 class Dataset:
     """
@@ -193,20 +193,34 @@ class Dataset:
             # elif self.balance_ratio > 0: # remove added label-band
             #     da = da.sel(band=list(range(da.sizes['band']-1)) )
 
-            # normalize
+
+            
+            # normalize with threshold
             if self.norm_threshold is not None:
                 # da = (da + 0.1) / (self.norm_threshold + 1) # normalises to [0 1] using  v_max= norm_threshold nd v_min=0, but with a small addition to omit 0/x
                 # da = da.clip(max=1)
                 if len(self.norm_threshold) ==1:
                     norm_min=0
-                    norm_max=self.norm_threshold
+                    norm_max=self.norm_threshold[0]
                 elif len(self.norm_threshold) == 2:
                     norm_min, norm_max = self.norm_threshold
                     
                 # normliise using norm_min nd norm_max values
                 da = (da - norm_min) / (norm_max - norm_min)
                 da = da.clip(min=0,max=1)
-                print('Normalised to {:.1f}-{:.1f}'.format(da.min().values, da.max().values) )
+            
+            # histogram adaptive equalization
+            else: 
+                n_bands = da['band'].shape[0]
+                all_band_eq=np.empty(da.shape)
+                
+                for band_i in range(n_bands): # perform adaptive normalisation per band
+                    band_data = da.isel(band=band_i)
+                    band_data_eq = skimage_exposure.equalize_adapthist(band_data, clip_limit=0.03)
+                    all_band_eq[band_i] = np.expand_dims(band_data_eq,axis=0)
+                
+                da = da.copy(data=all_band_eq) # overwrite data in dataArray
+
 
             yield (
                 da.sample.coords['x'],
