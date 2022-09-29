@@ -20,7 +20,7 @@ import pandas as pd
 def parse_config(config):
     """ Parse input arguments from dictionary or config file """
     if not isinstance(config, dict):
-        parser = configparser.ConfigParser()
+        parser = configparser.ConfigParser(allow_no_value=True)
         parser.read(config)
         config = parser["train-VAE"]
 
