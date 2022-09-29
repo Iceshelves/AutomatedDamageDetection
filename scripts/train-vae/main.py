@@ -38,7 +38,10 @@ def parse_config(config):
     #DATA
     # balanceRatio = float(config['balanceRatio'])
     file_DMGinfo = config['tiledDamagePixelsCountFile']
-    normThreshold = [float(i) for i in config['normalizationThreshold'].split(" ")]
+    # normThreshold = [float(i) for i in config['normalizationThreshold'].split(" ")]
+    normThreshold = config['normalizationThreshold']
+    if normThreshold is not None:
+        normThreshold = [float(i) for i in normThreshold.split(" ")]
     # MODEL
     filter1 = int(config['filter1'])
     filter2 = int(config['filter2'])
