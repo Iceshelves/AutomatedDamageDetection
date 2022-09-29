@@ -14,7 +14,7 @@ class Dataset:
     def __init__(self, tile_list, cutout_size, bands, offset=0, stride=None,
                  num_tiles=None, shuffle_tiles=False, norm_threshold=None,
                  return_coordinates=False,
-                 balance_ratio=0):
+                 ):
         """
         :param tile_list: list of tile paths
         :param cutout_size: length of the cutout side (number of pixels)
@@ -24,7 +24,7 @@ class Dataset:
         :param num_tiles: only use a selection of the provided tile list
         :param shuffle_tiles: if True, shuffle tiles
         :param norm_threshold: normalize image intensities using the provided
-            threshold value
+            threshold value, either [max] or [min,max].
         :param return_coordinates: if True, return the (X, Y) coordinates
             together with the cutouts
         """
@@ -40,7 +40,6 @@ class Dataset:
                 "offset to {}".format(offset,cutout_size,cutout_size % offset)
             )
         self.offset = offset
-        self.balance_ratio = balance_ratio
 
         self.mask = None
         self.buffer = None
@@ -142,9 +141,6 @@ class Dataset:
                 da = da.rio.clip([geometry], drop=True, invert=self.invert,
                                  all_touched=self.all_touched)
 
-            # TO DO: add labels as new band (for balancing)
-            # if self.balance_ratio >0:
-            #     da = add_labels_band(da)
 
             # apply offset
             da = da.shift(x=self.offset, y=self.offset)
@@ -159,30 +155,6 @@ class Dataset:
             da = da.stack(sample=('x', 'y'))
             da = da.dropna(dim='sample', how='any') # (band, x_win, y_win, sample)
 
-            # balance the ratio of labelled/unlabelled windows
-            #   balance_ratio = N_labelled / N_unlabelled  (0 = no blancing, 1 = equal balance)
-#             if self.balance_ratio > 0:
-
-#                 # TO DO: make sure labels are included as a band in the DA
-#                 # tile_cutouts = da
-
-#                 idx_labels = da.isel(band=-1) == 1   # all labelled pixels (labels are added as last band)
-#                 labelled_windows = idx_labels.sum(('x_win','y_win')) > 0 # boolean: identify all windows that have at least one labelled
-
-#                 # separate labelled and unlabelled windows
-#                 cutouts_label_1 = da.isel(sample=labelled_windows.values) # labelled
-#                 cutouts_label_0 = da.isel(sample=~labelled_windows.values)# unlabelled
-
-#                 N_label_1 = cutouts_label_1.isel(band=0,x_win=0,y_win=0).shape[0] # number of labelled windows (band=0 could be any band)
-#                 N_label_0 = int(1/self.balance_ratio * N_label_1) # number of unlabelled windows dependingn on balance ratio
-
-#                 # # select the windows according to the ratio
-#                 # # TO DO: select windows in a random order
-#                 data_train_label_1 = cutouts_label_1.isel(sample=np.arange(N_label_1))
-#                 data_train_label_0 = cutouts_label_0.isel(sample=np.arange(N_label_0))
-
-#                 da = xr.concat((data_train_label_1,data_train_label_0),dim='sample')
-
 
             # select bands
             if self.bands is not None:
@@ -190,8 +162,6 @@ class Dataset:
                     da = da.sel(band=[self.bands])
                 else:
                     da = da.sel(band=self.bands)
-            # elif self.balance_ratio > 0: # remove added label-band
-            #     da = da.sel(band=list(range(da.sizes['band']-1)) )
 
 
             
