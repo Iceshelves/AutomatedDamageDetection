@@ -138,7 +138,9 @@ class Dataset:
             if self.mask is not None:
                 mask = self.mask.to_crs(da.spatial_ref.crs_wkt)
                 geometry = mask.unary_union.buffer(self.buffer)
-                da = da.rio.clip([geometry], drop=True, invert=self.invert,
+                # da = da.rio.clip([geometry], drop=True, invert=self.invert,
+                #                  all_touched=self.all_touched)
+                da = da.rio.clip([geometry], drop=False, invert=self.invert, # if mask defined, do not drop
                                  all_touched=self.all_touched)
 
 
