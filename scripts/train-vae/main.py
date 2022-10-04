@@ -117,6 +117,7 @@ def main(config=None):
     test_set = dataset.Dataset(test_set_paths, sizeCutOut, bands,
                                shuffle_tiles=True,
                                norm_threshold=normThreshold)
+    test_set.set_mask(mask.unary_union, crs=mask.crs)
     test_set_tf = test_set.to_tf()
     test_set_tf = test_set_tf.batch(64, drop_remainder=True)
 
