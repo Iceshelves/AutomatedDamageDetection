@@ -6,6 +6,8 @@ import rioxarray as rioxr
 import tensorflow as tf
 import tiles
 from skimage import exposure as skimage_exposure
+from skimage.util import img_as_float as sk_image_as_float
+import numpy as np
 
 class Dataset:
     """
@@ -188,7 +190,7 @@ class Dataset:
                 
                 for band_i in range(n_bands): # perform adaptive normalisation per band
                     band_data = da.isel(band=band_i)
-                    band_data_eq = skimage_exposure.equalize_adapthist(band_data, clip_limit=0.03)
+                    band_data_eq = skimage_exposure.equalize_adapthist(sk_img_as_float(band_data), clip_limit=0.03)
                     all_band_eq[band_i] = np.expand_dims(band_data_eq,axis=0)
                 
                 da = da.copy(data=all_band_eq) # overwrite data in dataArray
