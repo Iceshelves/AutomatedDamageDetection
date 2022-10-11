@@ -94,16 +94,18 @@ def make_vae(encoder_inputs, z, z_mean, z_log_var, decoder,alpha=5):
     kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
     kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
     
+    # total loss: value to train on
     total_loss = reconstruction_loss +  alpha * kl_loss # alpha is custom
     vae.add_loss(total_loss)
     
-#     kl_loss = alpha * kl_loss
+    # TMP: use this to get insight in loss components
+    kl_loss2 = alpha * kl_loss
     
 #     vae.add_loss(reconstruction_loss)
 #     vae.add_loss(kl_loss)
 
-#     vae.add_metric(kl_loss, name='kl_loss', aggregation='mean')
-#     vae.add_metric(reconstruction_loss, name='rconstr_loss', aggregation='mean')
+    vae.add_metric(kl_loss2, name='kl_loss', aggregation='mean')
+    vae.add_metric(reconstruction_loss, name='rconstr_loss', aggregation='mean')
     
     return vae
     
