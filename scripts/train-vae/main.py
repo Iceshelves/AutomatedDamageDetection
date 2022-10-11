@@ -67,8 +67,8 @@ def main(config=None):
 
     # parse input arguments
     config = config if config is not None else "train-vae.ini"
-    catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile, bands, \
-        sizeCutOut, nEpochmax, nEpochTrain, sizeStep, stride, file_DMGinfo, normThreshold, \
+    catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile, \
+        bands, sizeCutOut, nEpochmax, nEpochTrain, sizeStep, stride, file_DMGinfo, normThreshold, \
         filter1, filter2, kernelSize1, kernelSize2, denseSize, latentDim, \
         alpha, batchSize,learnRate = parse_config(config)
     
@@ -118,7 +118,7 @@ def main(config=None):
                                shuffle_tiles=True,
                                norm_threshold=normThreshold)
     test_set.set_mask(mask.unary_union, crs=mask.crs)
-    test_set_tf = test_set.to_tf()
+    test_set_tf = test_set.to_tf() # generates cutuouts
     test_set_tf = test_set_tf.batch(64, drop_remainder=True)
 
     # balanced validation set (i.e. apply mask)
@@ -146,7 +146,7 @@ def main(config=None):
                                filter1,filter2,
                                kernelSize1,kernelSize2,
                                len(bands))
-    vae = VAE.make_vae(encoder_inputs, z, z_mean, z_log_var, decoder,alpha)
+    vae = VAE.make_vae(encoder_inputs, z, z_mean, z_log_var, decoder,alpha=alpha)
     vae.compile(optimizer=keras.optimizers.Adam(learning_rate=learnRate)) # default l.rate = 0.001
 
     path = outputDir + '/model_' + str(int(ts))
@@ -173,7 +173,7 @@ def main(config=None):
 #         history = vae.fit(x_train, epochs=1, batch_size=batch_size, validation_split=train_val_split) # validatio_split does not work because we loop all data every epoch (and then its not independent validatoin data)
 
         # print('Total loss: {} \n Reconstructiion loss: {} \n K-loss: {}'.format(total_loss, reconstruction_loss, kl_loss)) #
-        print('losses: {}'.format(vae.losses) )
+        # print('losses: {}'.format(vae.losses) )
 
         # change it: make a call to os to create a path
         vae.save(os.path.join(path, 'model_epoch_' + str(epochcounter)))
