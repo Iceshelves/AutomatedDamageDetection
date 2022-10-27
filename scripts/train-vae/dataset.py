@@ -166,7 +166,7 @@ class Dataset:
 
             for band_i in range(n_bands): # perform adaptive normalisation per band
                 band_data = img_as_float64(da.isel(band=band_i), force_copy=True)
-                print('.... band data converted to float, dtype: {}, min: {},  max: {}' .format(band_data.dtype, band_data.min(skipna=True),band_data.max(skipna=True)))
+                #print('.... band data converted to float, dtype: {}, min: {},  max: {}' .format(band_data.dtype, np.nanmin(band_data),np.nanmax(band_data)))
                 band_data_eq = skimage_exposure.equalize_adapthist(band_data, clip_limit=0.03)
                 all_band_eq[band_i] = np.expand_dims(band_data_eq,axis=0)
 
