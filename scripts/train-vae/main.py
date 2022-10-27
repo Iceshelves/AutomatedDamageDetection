@@ -177,11 +177,11 @@ def main(config=None):
 
         # change it: make a call to os to create a path
         vae.save(os.path.join(path, 'model_epoch_' + str(epochcounter)))
-        encoder.save(os.path.join(path, 'encoder_epoch_' + str(epochcounter - 1) ))
+        encoder.save(os.path.join(path, 'encoder_epoch_' + str(epochcounter) )) 
         
         # save history dict to jsson
         hist_df = pd.DataFrame(history.history)  
-        hist_json_file = os.path.join(path, 'history_epoch_' + str(epochcounter - 1) )
+        hist_json_file = os.path.join(path, 'history_epoch_' + str(epochcounter) )
         with open(hist_json_file, mode='w') as f:
             hist_df.to_json(f)
 
