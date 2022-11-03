@@ -4,6 +4,7 @@
 .DS_Store
 */.DS_Store
 */__pycache__/
+scripts/train-vae/__pycache__/
 
 # file types
 *.png
@@ -12,3 +13,7 @@
 
 # directories
 training/
+tests/
+
+# specific files
+scripts/train-vae/train-vae-S1.ini
