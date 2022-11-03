@@ -24,7 +24,6 @@ import pathlib
 import pandas as pd
 import xarray as xr
 
-print('---- modules imported')
 
 
 def parse_config(config):
@@ -70,12 +69,33 @@ def parse_config(config):
             filter1, filter2, kernelSize1,kernelSize2, denseSize, latentDim,
             alpha, batchSize,learnRate)
 
-path_to_traindir = os.path.join(workdir,'training/2022-10/2022-10-04/') 
-model_dir = 'model_1664891181' # 'model_1665487140'
+''' ----------
+Define model to load
+------------'''
+
+
+# path_to_traindir = os.path.join(workdir,'training/2022-10/2022-10-04/') 
+# model_dir = 'model_1664891181' # model 4/oct/22, alpha=2000; incl hist.eq.  
+# # model_dir = 'model_1664876184' # model 4/oct/22, alpha=200; incl hist.eq
+# # 'model_1665487140' # model 10/oct/22, alpha=2000; incl hist.eq. So should be same(similar) as model_1664891181..? The difference is that I applied the test-encoding now on the img instead of windows.
+
+
+path_to_traindir = os.path.join(workdir,'training/2022-11/2022-11-03-vrlab/') 
+# model_dir = 'model_1667468050' # model 03/nov/22, alpha=200; incl hist.eq || CANNOT OPEN
+model_dir = 'model_1667483594' # model 03/nov/22, alpha=200; excl.hist.eq 
+
 
 path_to_model = os.path.join(path_to_traindir, model_dir)
 
-# parse input arguments
+# get tile name
+tile_file = os.path.join(homedir,'Data/tiles/training_tiles/S2_composite_2019-11-1_2020-3-1_tile_124.tif')
+mask_file = os.path.join(homedir,'Data/ne_10m_antarctic_ice_shelves_polys/ne_10m_antarctic_ice_shelves_polys.shp')    
+
+print('Loading from model_dir {}'.format(path_to_traindir+model_dir))
+
+''' ----------
+Parse input arguments
+------------'''
 # config = glob.glob(path_to_traindir + "train-vae.ini")
 config = os.path.join(path_to_model,'train-vae.ini')
 
@@ -94,14 +114,17 @@ Load model
 # print(path_to_model)
 # path_to_model = path_to_model[-1]
 
-epoch_dirs = glob.glob(path_to_model +'/epoch*' )
+epoch_dirs = glob.glob(path_to_model +'/model_epoch*' )
 encoder_dirs = glob.glob(path_to_model+'/encoder*')
 path_to_model_epoch = epoch_dirs[-1]
 path_to_encoder_epoch = encoder_dirs[-1]
 
-
-model = tf.keras.models.load_model(path_to_model_epoch ,compile=False)
-encoder = tf.keras.models.load_model(path_to_encoder_epoch,compile=False)
+try:
+    model = tf.keras.models.load_model(path_to_model_epoch ,compile=False)
+    encoder = tf.keras.models.load_model(path_to_encoder_epoch,compile=False)
+except ValueError: # when mdoel saved in h5 format, try different laod approach 
+    model = tf.keras.models.load_model(path_to_model_epoch)
+    encoder = tf.keras.models.load_model(path_to_encoder_epoch)
 
 # Get latent_dim (of sampling layer)
 latent_dim = encoder.layers[-1].output_shape[-1] # is 4
@@ -208,11 +231,6 @@ Update: do not link laabldata; now read same-tile NERD output
 
 # for tile in tile_list: # from dataset.py _generate_cutouts
 
-# get tile name
-
-tile_file = os.path.join(homedir,'Data/tiles/training_tiles/S2_composite_2019-11-1_2020-3-1_tile_124.tif')
-mask_file = os.path.join(homedir,'Data/ne_10m_antarctic_ice_shelves_polys/ne_10m_antarctic_ice_shelves_polys.shp')    
-# mask_file = '..'
 
 
 tileName = tile_file.split("/")[-1][:-4] # vb: 'S2_composite_2019-11-1_2020-3-1_tile_124'
@@ -255,7 +273,7 @@ try:
     da.plot.imshow(ax=ax,rgb='band', vmin=0,vmax=1)#,cbar_kwargs={"fraction": 0.046})
     ax.set_title(tileNum + ' normalised and equalised')
     ax.set_aspect('equal')
-    fig.savefig(os.path.join(path_to_traindir , model_dir, 'spatial_lspace_' + tileNum))
+    fig.savefig(os.path.join(path_to_traindir , model_dir, tileNum + '_normalised_histEq'))
 except Exception:
     print('Error for plotting image -- skipped')
     pass
@@ -339,7 +357,7 @@ if latent_dim == 4:
     axes[1,1].set_title('z3')
     axes[1,1].set_aspect('equal')
 
-    fig.savefig(os.path.join(path_to_traindir , model_dir, 'spatial_lspace_' + tileNum))
+    fig.savefig(os.path.join(path_to_traindir , model_dir, tileNum + '_spatial_lspace'))
 
 
 '''
