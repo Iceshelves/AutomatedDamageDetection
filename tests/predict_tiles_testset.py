@@ -8,6 +8,9 @@ from sklearn.manifold import TSNE
 import rioxarray as rioxr
 import xarray as xr
 
+import matplotlib.pyplot as plt
+import os
+from skimage import exposure as skimage_exposure
 
 homedir = '/Users/tud500158/Library/Mobile Documents/com~apple~CloudDocs/Documents/Documents - TUD500158/'
 workdir = os.path.join(homedir,'github/AutomatedDamageDetection/')
@@ -47,10 +50,8 @@ def parse_config(config):
             bands, sizeCutOut, nEpochMax, sizeStep, normThreshold)
 
 
-# path_to_traindir = './model_v0/train_epoch_2/' # path on local computer
-# path_to_traindir = '../train/model_v0/train_epoch_2/' # path on cartesius
-path_to_traindir = os.path.join(workdir,'training//2022-10/') # path on cartesius
-model_dir = 'model_1665487140'
+path_to_traindir = os.path.join(workdir,'training/2022-10/2022-10-04/') 
+model_dir = 'model_1664891181' # 'model_1665487140'
 
 path_to_model = os.path.join(path_to_traindir, model_dir)
 
@@ -125,6 +126,12 @@ def create_cutouts2(da,cutout_size, normThreshold=None, equalise=False):
 
     return tile_cutouts, tile_cutouts_da
 
+def mask_data(data, mask_file):
+    mask_poly = gpd.read_file(mask_file).to_crs(epsg=3031)
+    # gdf = mask_poly.unary_union 
+    # mask = data #.copy(data=np.ones_like(data.values)) # set up img with only 1 vluess
+    masked_data = data.rio.clip(mask_poly.unary_union, mask_poly.crs, drop=False, invert=False) # mask (raster)
+    return masked_data
 
 ''' ----------
 Get testdata: one tile
@@ -186,6 +193,8 @@ mask_file = os.path.join(homedir,'Data/ne_10m_antarctic_ice_shelves_polys/ne_10m
 
 
 tileName = tile_file.split("/")[-1][:-4] # vb: 'S2_composite_2019-11-1_2020-3-1_tile_124'
+tileNum='tile_'+tileName.split('tile_')[-1]
+
 print('\n----\n Processing ' + tileName +'\n')
 
 # read tile - floats are required to mask with NaN's
@@ -198,108 +207,118 @@ if bands is not None:
     else:
         da = da.sel(band=bands)
 
+''' ----------
+Mask ocean
+------------'''
+
 # mask/clip: if self.mask is not None: [removed; see _generate_cutouts]
 da = mask_data(da,mask_file)
 
 
+''' ----------
+Normalise and Equalise
+------------'''
 
-# generate windows -- normalise and equalise
+da = normalise_and_equalise(da,normThreshold=normThreshold[0],equalise=True)
 
-# tile_cutouts, tile_cutouts_da = create_cutouts(da,cutout_size, normThreshold=normThreshold[0],equalise=True) # samples, x_win, y_win, bands: (250000, 20, 20, 1)
 
-img_equal = normalise_and_equalise(da,normThreshold=normThreshold[0],equalise=True)
-tile_cutouts, tile_cutouts_da, img_equal = create_cutouts2(da,cutout_size) # samples, x_win, y_win, bands: (250000, 20, 20, 1)
+''' ----------
+Plot tile (for test phase)
+------------'''
+fig,ax= plt.subplots(1,figsize=(10,8))
+da.attrs['long_name']='imgbands';
+# da.isel(band=0).plot.imshow(ax=ax,vmin=0,vmax=1,cbar_kwargs={"fraction": 0.046})
+da.plot.imshow(ax=ax,rgb='band', vmin=0,vmax=1,cbar_kwargs={"fraction": 0.046})
+ax.set_title(tileNum + ' normalised and equalised')
+ax.set_aspect('equal')
+fig.savefig(os.path.join(path_to_traindir , model_dir, 'spatial_lspace_' + tileNum))
+
+''' ----------
+Create cut-outs
+------------'''
+
+# generate windows -- cut 
+
+tile_cutouts, tile_cutouts_da = create_cutouts2(da,cutout_size) # samples, x_win, y_win, bands: (250000, 20, 20, 1)
 # label_cutouts, __ = create_cutouts(tile_dmg_int, cutout_size)
 
-# print(tile_cutouts.shape , label_cutouts.shape)
-print(tile_cutouts.shape)
 
 
 
 
 
-# ''' ----------
-# Create cut-outs
-#     Actually read the tile, make cutouts
-# ------------'''
+
+''' ----------
+Encode input 
+------------'''
+encoded_data_file = os.path.join(path_to_model, tileName + "_encoded.npy")
+if os.path.exists(encoded_data_file):
+    # read file
+    encoded_data = np.load(encoded_data_file)
+    print('---- loaded encoded data; size: ', encoded_data.shape)
+else: 
+    # encode data and save file
+    encoded_data,_,_ = encoder.predict(tile_cutouts);
+    np.save(encoded_data_file, encoded_data) # save encoded data for later use.
+    # np.save(tileName + "_labels.npy", label_cutouts) # save encoded data for later use.
+    print('---- succesfully encoded data; size: ', encoded_data.shape)
 
 
-
-# for tile in tile_list: # from dataset.py _generate_cutouts
-#     # get tile name
-#     tileName = tile.split("/")[-1][:-4] # vb: 'S2_composite_2019-11-1_2020-3-1_tile_124'
-#     print('\n----\n Processing ' + tileName +'\n')
-    
-#     # read tile - floats are required to mask with NaN's
-#     da = rioxr.open_rasterio(tile).astype("float32")
-
-#     # select bands
-#     if bands is not None:
-#         if type(bands) is not list:
-#             da = da.sel(band=[bands])
-#         else:
-#             da = da.sel(band=bands)
-
-#     # mask/clip: if self.mask is not None: [removed; see _generate_cutouts]
-
-#     # apply offset [removed: only relevant for training, not for testing]
-    
-#     # rasterize labels: create mask on tile raster
-#     labels_tileraster = geometry_mask(label_polys,
-#                                       out_shape=(len(da.y),len(da.x)),
-#                                       transform=da.rio.transform(),invert=True)
-#     labels_tileraster = labels_tileraster.astype(np.dtype('uint16')) # np ndarray (x , y)
-#     labels_tileraster = np.expand_dims(labels_tileraster,axis=0) # ndarray (1 , x , y) because tiledata shape (3,x,y)
-#     # create dataArray from np ndarray
-#     da_label = xr.DataArray(
-#                 data=labels_tileraster,
-#                 dims=["band","x", "y"])
-    
-
-#     # generate windows
-#     da = da.rolling(x=cutout_size, y=cutout_size)
-#     da = da.construct({'x': 'x_win', 'y': 'y_win'}, stride=cutout_size)
-
-#     # drop NaN-containing windows
-#     da = da.stack(sample=('x', 'y'))
-#     da = da.dropna(dim='sample', how='any')
-
-#     # normalize
-#     if normThreshold is not None:
-#         da = (da + 0.1) / (normThreshold + 1)
-#         da = da.clip(max=1)
-
-#     tile_cutouts = da.data.transpose(3, 1, 2, 0) # samples, x_win, y_win, bands: (250000, 20, 20, 3)
-    
-#     # same for labels:
-#     da_label = da_label.rolling(x=cutout_size, y=cutout_size)
-#     da_label = da_label.construct({'x': 'x_win', 'y': 'y_win'}, stride=cutout_size)
-#     da_label = da_label.stack(sample=('x', 'y'))
-#     da_label = da_label.dropna(dim='sample', how='any')
-#     # no need to normalize
-#     label_cutouts = da_label.data.transpose(3, 1, 2, 0)  # samples, x_win, y_win, bands: (250000, 20, 20, 1)
-
-
-#     print(tile_cutouts.shape , label_cutouts.shape)
-
-
-
-#     ''' ----------
-#     Encode input 
-#     ------------'''
-
-
-#     # encoded_data,_,_ = encoder.predict(test_set_tf);
-#     encoded_data,_,_ = encoder.predict(tile_cutouts);
-#     np.save(tileName + "_encoded.npy", encoded_data) # save encoded data for later use.
-#     np.save(tileName + "_labels.npy", label_cutouts) # save encoded data for later use.
-#     print('---- succesfully encoded data; size: ', encoded_data.shape)
-
-
+''' ----------
+predict output  
+------------'''   
 #     # predicted_data = model.predict(test_set_tf); # reconstruct images (windows):
 #     predicted_data = model.predict(tile_cutouts); # reconstruct images (windows):
 #     np.save(tileName + "_predicted.npy",predicted_data)
 #     print('---- succesfully predicted data')
+
+
+''' ----------
+Plot latent space spatially Ldim=4
+------------'''
+
+if latent_dim == 4:
+    z0 = encoded_data[:,0]
+    z1 = encoded_data[:,1]
+    z2 = encoded_data[:,2]
+    z3 = encoded_data[:,3]
+
+
+
+    # add z0 only to (sample,x,y. )
+    L_space_xy_z0 =  tile_cutouts_da.isel(band=[0],x_win=0,y_win=0).copy(deep=True, data=np.expand_dims(z0,axis=1) ) #.unstack()
+    L_space_xy_z1 =  tile_cutouts_da.isel(band=[0],x_win=0,y_win=0).copy(deep=True, data=np.expand_dims(z1,axis=1) ) #.unstack()
+    L_space_xy_z2 =  tile_cutouts_da.isel(band=[0],x_win=0,y_win=0).copy(deep=True, data=np.expand_dims(z2,axis=1) ) #.unstack()
+    L_space_xy_z3 =  tile_cutouts_da.isel(band=[0],x_win=0,y_win=0).copy(deep=True, data=np.expand_dims(z3,axis=1) ) #.unstack()
+
+
+    fig,axes = plt.subplots(2,2,figsize=(20,10))
+
+    # axes[0,0].imshow(tile_da[0])
+    # axes[0,0].set_aspect('equal')
+    # tile_data.isel(band=0).plot.imshow()#ax=axes[0],x='x',add_label=False)
+
+    L_space_xy_z0.unstack().isel(band=0).plot.imshow(ax=axes[0,0],x='x',cmap='RdBu') #,vmin=-0.1,vmax=0.1, # vmin=-2 vmax=2
+    axes[0,0].set_title('z0')
+    axes[0,0].set_aspect('equal')
+
+
+    L_space_xy_z1.unstack().isel(band=0).plot.imshow(ax=axes[0,1],x='x',cmap='RdBu') # vmin=-0.1,vmax=0.1,
+    axes[0,1].set_title('z1')
+    axes[0,1].set_aspect('equal')
+
+
+    L_space_xy_z2.unstack().isel(band=0).plot.imshow(ax=axes[1,0],x='x',cmap='RdBu') # vmin=-2 vmax=2
+    axes[1,0].set_title('z2')
+    axes[1,0].set_aspect('equal')
+
+
+    L_space_xy_z3.unstack().isel(band=0).plot.imshow(ax=axes[1,1],x='x',cmap='RdBu') # vmin=-2 vmax=2
+    axes[1,1].set_title('z3')
+    axes[1,1].set_aspect('equal')
+
+    fig.savefig(os.path.join(path_to_traindir , model_dir, 'spatial_lspace_' + tileNum))
+
 
 '''
 ARCIHVED:
