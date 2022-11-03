@@ -150,8 +150,8 @@ def main(config=None):
     vae.compile(optimizer=keras.optimizers.Adam(learning_rate=learnRate)) # default l.rate = 0.001
 
     path = outputDir + '/model_' + str(int(ts))
-    vae.save(os.path.join(path, 'epoch_' + str(epochcounter - 1)))
-    encoder.save(os.path.join(path, 'encoder_epoch_' + str(epochcounter - 1) ))
+    vae.save(os.path.join(path, 'model_epoch_' + str(epochcounter - 1)),save_format="h5")
+    encoder.save(os.path.join(path, 'encoder_epoch_' + str(epochcounter - 1) ), save_format="h5")
 
     # begin loop
     while epochcounter <= nEpochmax:
@@ -176,8 +176,8 @@ def main(config=None):
         # print('losses: {}'.format(vae.losses) )
 
         # change it: make a call to os to create a path
-        vae.save(os.path.join(path, 'model_epoch_' + str(epochcounter)))
-        encoder.save(os.path.join(path, 'encoder_epoch_' + str(epochcounter) )) 
+        vae.save(os.path.join(path, 'model_epoch_' + str(epochcounter)))#,save_format="h5")
+        encoder.save(os.path.join(path, 'encoder_epoch_' + str(epochcounter) ))#,save_format="h5") 
         
         # save history dict to jsson
         hist_df = pd.DataFrame(history.history)  
