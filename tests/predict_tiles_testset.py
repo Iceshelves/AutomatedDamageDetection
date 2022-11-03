@@ -8,6 +8,10 @@ from sklearn.manifold import TSNE
 import rioxarray as rioxr
 import xarray as xr
 
+
+homedir = '/Users/tud500158/Library/Mobile Documents/com~apple~CloudDocs/Documents/Documents - TUD500158/'
+workdir = os.path.join(homedir,'github/AutomatedDamageDetection/')
+os.chdir(os.path.join(workdir,'scripts/train-vae/'))
 import dataset
 import tiles as ts
 
@@ -44,10 +48,15 @@ def parse_config(config):
 
 
 # path_to_traindir = './model_v0/train_epoch_2/' # path on local computer
-path_to_traindir = '../train/model_v0/train_epoch_2/' # path on cartesius
+# path_to_traindir = '../train/model_v0/train_epoch_2/' # path on cartesius
+path_to_traindir = os.path.join(workdir,'training//2022-10/') # path on cartesius
+model_dir = 'model_1665487140'
+
+path_to_model = os.path.join(path_to_traindir, model_dir)
 
 # parse input arguments
-config = glob.glob(path_to_traindir + "train-vae.ini")
+# config = glob.glob(path_to_traindir + "train-vae.ini")
+config = os.path.join(path_to_model,'train-vae.ini')
 catalog_path, labels_path, outputDir, sizeTestSet, sizeValSet, roiFile, bands, \
     cutout_size, nEpochmax, sizeStep, normThreshold = parse_config(config)
 
@@ -57,9 +66,10 @@ Load model
 ------------'''
 
 
-path_to_model = glob.glob(path_to_traindir + 'model*')
-print(path_to_model)
-path_to_model = path_to_model[0]
+# path_to_model = glob.glob(path_to_traindir + 'model*')
+# print(path_to_model)
+# path_to_model = path_to_model[-1]
+
 epoch_dirs = glob.glob(path_to_model +'/epoch*' )
 encoder_dirs = glob.glob(path_to_model+'/encoder*')
 path_to_model_epoch = epoch_dirs[-1]
@@ -74,6 +84,46 @@ latent_dim = encoder.layers[-1].output_shape[-1] # is 4
 
 
 print('---- loaded model, encoder and .ini')
+
+'''
+FUNCTIONS
+'''
+
+def normalise_and_equalise(da,normThreshold=None,equalise=False):
+    
+    # normalize
+    if normThreshold is not None:
+        da = (da + 0.1) / (normThreshold + 1)
+        da = da.clip(max=1)
+    
+    if equalise:
+        # hist equalist
+        n_bands = da['band'].shape[0]
+        all_band_eq=np.empty(da.shape)
+
+        for band_i in range(n_bands): # perform adaptive normalisation per band
+            band_data = da.isel(band=band_i)
+            band_data_eq = skimage_exposure.equalize_adapthist(band_data, clip_limit=0.03)
+            all_band_eq[band_i] = np.expand_dims(band_data_eq,axis=0)
+
+        da = da.copy(data=all_band_eq) # overwrite data in dataArray
+    
+    return da
+    
+def create_cutouts2(da,cutout_size, normThreshold=None, equalise=False):
+
+    # generate windows
+    da = da.rolling(x=cutout_size, y=cutout_size)
+    da = da.construct({'x': 'x_win', 'y': 'y_win'}, stride=cutout_size)
+
+    # drop NaN-containing windows
+    da = da.stack(sample=('x', 'y'))
+    da = da.dropna(dim='sample', how='any')
+
+    tile_cutouts = da.data.transpose(3, 1, 2, 0) # samples, x_win, y_win, bands: (250000, 20, 20, 3)
+    tile_cutouts_da = da.transpose('sample','x_win','y_win','band')
+
+    return tile_cutouts, tile_cutouts_da
 
 
 ''' ----------
@@ -102,129 +152,158 @@ tile_list = test_set_paths
 Get Labels
 ------------'''
 
-def _read_labels(labels_path, verbose=True): # FROM tiles.py 
-    """ Read all labels, and merge them in a single GeoDataFrame """
-    labels_path = pathlib.Path(labels_path)
-    labels = [gpd.read_file(p) for p in labels_path.glob("*.geojson")]
-    if verbose:
-        print("Labels successfully read from {} files".format(len(labels)))
+# # # read tile catalog to be able to get CRS and filter labels to same date
+# catalog = ts._read_tile_catalog(catalog_path)
+# tiles = ts._catalog_to_geodataframe(catalog)
 
-    crs = labels[0].crs
-    assert all([label.crs == crs for label in labels])
-    labels = pd.concat(labels)
-
-    # fix datetimes' type
-    labels.Date = pd.to_datetime(labels.Date)
-    return labels
+# labels = ts._read_labels(labels_path, verbose=True)
+# labels = labels.to_crs(tiles.crs)  # make sure same CRS is used
+# # select the only labels matching the tiles timespan
+# labels = ts._filter_labels(labels,
+#                         tiles.start_datetime.min(),
+#                         tiles.end_datetime.max())
 
 
+# ## Create GeoSeries from labels.geometry
+# label_polys = gpd.GeoSeries(labels.geometry,crs=labels.crs) # Combine all geometries to one GeoSeries, with the 
 
-def _filter_labels(labels, start_datetime, end_datetime, verbose=True): # FROM tiles.py 
-    """ Select the labels whose date in the provided datetime range """
-    mask = (labels.Date >= start_datetime) & (labels.Date <= end_datetime)
-    if verbose:
-        print("Selecting {} out of {} labels".format(mask.sum(), len(labels)))
-    return labels[mask]
-
-
-# # read tile catalog to be able to get CRS and filter labels to same date
-catalog = ts._read_tile_catalog(catalog_path)
-tiles = ts._catalog_to_geodataframe(catalog)
-
-labels = _read_labels(labels_path, verbose=True)
-labels = labels.to_crs(tiles.crs)  # make sure same CRS is used
-# select the only labels matching the tiles timespan
-labels = _filter_labels(labels,
-                        tiles.start_datetime.min(),
-                        tiles.end_datetime.max())
-
-
-## Create GeoSeries from labels.geometry
-label_polys = gpd.GeoSeries(labels.geometry,crs=labels.crs) # Combine all geometries to one GeoSeries, with the 
 
 
 ''' ----------
 Create cut-outs
     Actually read the tile, make cutouts, linked with labeldata
+    
+Update: do not link laabldata; now read same-tile NERD output
 ------------'''
 
+# for tile in tile_list: # from dataset.py _generate_cutouts
 
-for tile in tile_list: # from dataset.py _generate_cutouts
-    # get tile name
-    tileName = tile.split("/")[-1][:-4] # vb: 'S2_composite_2019-11-1_2020-3-1_tile_124'
-    print('\n----\n Processing ' + tileName +'\n')
+# get tile name
+
+tile_file = os.path.join(homedir,'Data/tiles/training_tiles/S2_composite_2019-11-1_2020-3-1_tile_124.tif')
+mask_file = os.path.join(homedir,'Data/ne_10m_antarctic_ice_shelves_polys/ne_10m_antarctic_ice_shelves_polys.shp')    
+# mask_file = '..'
+
+
+tileName = tile_file.split("/")[-1][:-4] # vb: 'S2_composite_2019-11-1_2020-3-1_tile_124'
+print('\n----\n Processing ' + tileName +'\n')
+
+# read tile - floats are required to mask with NaN's
+da = rioxr.open_rasterio(tile_file).astype("float32")
+
+# select bands
+if bands is not None:
+    if type(bands) is not list:
+        da = da.sel(band=[bands])
+    else:
+        da = da.sel(band=bands)
+
+# mask/clip: if self.mask is not None: [removed; see _generate_cutouts]
+da = mask_data(da,mask_file)
+
+
+
+# generate windows -- normalise and equalise
+
+# tile_cutouts, tile_cutouts_da = create_cutouts(da,cutout_size, normThreshold=normThreshold[0],equalise=True) # samples, x_win, y_win, bands: (250000, 20, 20, 1)
+
+img_equal = normalise_and_equalise(da,normThreshold=normThreshold[0],equalise=True)
+tile_cutouts, tile_cutouts_da, img_equal = create_cutouts2(da,cutout_size) # samples, x_win, y_win, bands: (250000, 20, 20, 1)
+# label_cutouts, __ = create_cutouts(tile_dmg_int, cutout_size)
+
+# print(tile_cutouts.shape , label_cutouts.shape)
+print(tile_cutouts.shape)
+
+
+
+
+
+# ''' ----------
+# Create cut-outs
+#     Actually read the tile, make cutouts
+# ------------'''
+
+
+
+# for tile in tile_list: # from dataset.py _generate_cutouts
+#     # get tile name
+#     tileName = tile.split("/")[-1][:-4] # vb: 'S2_composite_2019-11-1_2020-3-1_tile_124'
+#     print('\n----\n Processing ' + tileName +'\n')
     
-    # read tile - floats are required to mask with NaN's
-    da = rioxr.open_rasterio(tile).astype("float32")
+#     # read tile - floats are required to mask with NaN's
+#     da = rioxr.open_rasterio(tile).astype("float32")
 
-    # select bands
-    if bands is not None:
-        if type(bands) is not list:
-            da = da.sel(band=[bands])
-        else:
-            da = da.sel(band=bands)
+#     # select bands
+#     if bands is not None:
+#         if type(bands) is not list:
+#             da = da.sel(band=[bands])
+#         else:
+#             da = da.sel(band=bands)
 
-    # mask/clip: if self.mask is not None: [removed; see _generate_cutouts]
+#     # mask/clip: if self.mask is not None: [removed; see _generate_cutouts]
 
-    # apply offset [removed: only relevant for training, not for testing]
+#     # apply offset [removed: only relevant for training, not for testing]
     
-    # rasterize labels: create mask on tile raster
-    labels_tileraster = geometry_mask(label_polys,
-                                      out_shape=(len(da.y),len(da.x)),
-                                      transform=da.rio.transform(),invert=True)
-    labels_tileraster = labels_tileraster.astype(np.dtype('uint16')) # np ndarray (x , y)
-    labels_tileraster = np.expand_dims(labels_tileraster,axis=0) # ndarray (1 , x , y) because tiledata shape (3,x,y)
-    # create dataArray from np ndarray
-    da_label = xr.DataArray(
-                data=labels_tileraster,
-                dims=["band","x", "y"])
+#     # rasterize labels: create mask on tile raster
+#     labels_tileraster = geometry_mask(label_polys,
+#                                       out_shape=(len(da.y),len(da.x)),
+#                                       transform=da.rio.transform(),invert=True)
+#     labels_tileraster = labels_tileraster.astype(np.dtype('uint16')) # np ndarray (x , y)
+#     labels_tileraster = np.expand_dims(labels_tileraster,axis=0) # ndarray (1 , x , y) because tiledata shape (3,x,y)
+#     # create dataArray from np ndarray
+#     da_label = xr.DataArray(
+#                 data=labels_tileraster,
+#                 dims=["band","x", "y"])
     
 
-    # generate windows
-    da = da.rolling(x=cutout_size, y=cutout_size)
-    da = da.construct({'x': 'x_win', 'y': 'y_win'}, stride=cutout_size)
+#     # generate windows
+#     da = da.rolling(x=cutout_size, y=cutout_size)
+#     da = da.construct({'x': 'x_win', 'y': 'y_win'}, stride=cutout_size)
 
-    # drop NaN-containing windows
-    da = da.stack(sample=('x', 'y'))
-    da = da.dropna(dim='sample', how='any')
+#     # drop NaN-containing windows
+#     da = da.stack(sample=('x', 'y'))
+#     da = da.dropna(dim='sample', how='any')
 
-    # normalize
-    if normThreshold is not None:
-        da = (da + 0.1) / (normThreshold + 1)
-        da = da.clip(max=1)
+#     # normalize
+#     if normThreshold is not None:
+#         da = (da + 0.1) / (normThreshold + 1)
+#         da = da.clip(max=1)
 
-    tile_cutouts = da.data.transpose(3, 1, 2, 0) # samples, x_win, y_win, bands: (250000, 20, 20, 3)
+#     tile_cutouts = da.data.transpose(3, 1, 2, 0) # samples, x_win, y_win, bands: (250000, 20, 20, 3)
     
-    # same for labels:
-    da_label = da_label.rolling(x=cutout_size, y=cutout_size)
-    da_label = da_label.construct({'x': 'x_win', 'y': 'y_win'}, stride=cutout_size)
-    da_label = da_label.stack(sample=('x', 'y'))
-    da_label = da_label.dropna(dim='sample', how='any')
-    # no need to normalize
-    label_cutouts = da_label.data.transpose(3, 1, 2, 0)  # samples, x_win, y_win, bands: (250000, 20, 20, 1)
+#     # same for labels:
+#     da_label = da_label.rolling(x=cutout_size, y=cutout_size)
+#     da_label = da_label.construct({'x': 'x_win', 'y': 'y_win'}, stride=cutout_size)
+#     da_label = da_label.stack(sample=('x', 'y'))
+#     da_label = da_label.dropna(dim='sample', how='any')
+#     # no need to normalize
+#     label_cutouts = da_label.data.transpose(3, 1, 2, 0)  # samples, x_win, y_win, bands: (250000, 20, 20, 1)
 
 
-    print(tile_cutouts.shape , label_cutouts.shape)
+#     print(tile_cutouts.shape , label_cutouts.shape)
 
 
 
-    ''' ----------
-    Encode input 
-    ------------'''
+#     ''' ----------
+#     Encode input 
+#     ------------'''
 
 
-    # encoded_data,_,_ = encoder.predict(test_set_tf);
-    encoded_data,_,_ = encoder.predict(tile_cutouts);
-    np.save(tileName + "_encoded.npy", encoded_data) # save encoded data for later use.
-    np.save(tileName + "_labels.npy", label_cutouts) # save encoded data for later use.
-    print('---- succesfully encoded data; size: ', encoded_data.shape)
+#     # encoded_data,_,_ = encoder.predict(test_set_tf);
+#     encoded_data,_,_ = encoder.predict(tile_cutouts);
+#     np.save(tileName + "_encoded.npy", encoded_data) # save encoded data for later use.
+#     np.save(tileName + "_labels.npy", label_cutouts) # save encoded data for later use.
+#     print('---- succesfully encoded data; size: ', encoded_data.shape)
 
 
-    # predicted_data = model.predict(test_set_tf); # reconstruct images (windows):
-    predicted_data = model.predict(tile_cutouts); # reconstruct images (windows):
-    np.save(tileName + "_predicted.npy",predicted_data)
-    print('---- succesfully predicted data')
+#     # predicted_data = model.predict(test_set_tf); # reconstruct images (windows):
+#     predicted_data = model.predict(tile_cutouts); # reconstruct images (windows):
+#     np.save(tileName + "_predicted.npy",predicted_data)
+#     print('---- succesfully predicted data')
 
+'''
+ARCIHVED:
+'''
 
 
 # # def embed_latentspace_2D(encoded_data,
