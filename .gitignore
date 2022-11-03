@@ -1,0 +1,14 @@
+# checkpoints
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+.DS_Store
+*/.DS_Store
+*/__pycache__/
+
+# file types
+*.png
+*/*.png
+*/Untitled*
+
+# directories
+training/
