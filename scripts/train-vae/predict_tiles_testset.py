@@ -30,7 +30,7 @@ print('---- modules imported')
 def parse_config(config):
     """ Parse input arguments from dictionary or config file """
     if not isinstance(config, dict):
-        parser = configparser.ConfigParser()
+        parser = configparser.ConfigParser(allow_no_value=True)
         parser.read(config)
         config = parser["train-VAE"]
 
@@ -42,13 +42,33 @@ def parse_config(config):
     roiFile = config['ROIFile']
     bands = [int(i) for i in config['bands'].split(" ")]
     sizeCutOut = int(config['sizeCutOut'])
-    nEpochMax = int(config['nEpochMax'])
     sizeStep = int(config['sizeStep'])
-    normThreshold = float(config['normalizationThreshold'])
-        
-    return (catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile,
-            bands, sizeCutOut, nEpochMax, sizeStep, normThreshold)
+    stride = int(config['stride'])
+    #DATA
+    # balanceRatio = float(config['balanceRatio'])
+    file_DMGinfo = config['tiledDamagePixelsCountFile']
+    # normThreshold = [float(i) for i in config['normalizationThreshold'].split(" ")]
+    normThreshold = config['normalizationThreshold']
+    if normThreshold is not None:
+        normThreshold = [float(i) for i in normThreshold.split(" ")]
+    # MODEL
+    filter1 = int(config['filter1'])
+    filter2 = int(config['filter2'])
+    kernelSize1 = int(config['kernelSize1'])
+    kernelSize2 = int(config['kernelSize2'])
+    denseSize = int(config['denseSize'])
+    latentDim = int(config['latentDim'])
+    #vae:
+    alpha = float(config['alpha'])
+    batchSize = int(config['batchSize'])
+    nEpochMax = int(config['nEpochData'])
+    nEpochTrain = int(config['nEpochTrain'])
+    learnRate = float(config['learningRate'])
 
+    return (catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile,
+            bands, sizeCutOut, nEpochMax, nEpochTrain, sizeStep, stride, file_DMGinfo, normThreshold,
+            filter1, filter2, kernelSize1,kernelSize2, denseSize, latentDim,
+            alpha, batchSize,learnRate)
 
 path_to_traindir = os.path.join(workdir,'training/2022-10/2022-10-04/') 
 model_dir = 'model_1664891181' # 'model_1665487140'
@@ -58,8 +78,11 @@ path_to_model = os.path.join(path_to_traindir, model_dir)
 # parse input arguments
 # config = glob.glob(path_to_traindir + "train-vae.ini")
 config = os.path.join(path_to_model,'train-vae.ini')
-catalog_path, labels_path, outputDir, sizeTestSet, sizeValSet, roiFile, bands, \
-    cutout_size, nEpochmax, sizeStep, normThreshold = parse_config(config)
+
+catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile, \
+        bands, cutout_size, nEpochmax, nEpochTrain, sizeStep, stride, file_DMGinfo, normThreshold, \
+        filter1, filter2, kernelSize1, kernelSize2, denseSize, latentDim, \
+        alpha, batchSize,learnRate = parse_config(config)
 
 
 ''' ----------
@@ -225,13 +248,17 @@ da = normalise_and_equalise(da,normThreshold=normThreshold[0],equalise=True)
 ''' ----------
 Plot tile (for test phase)
 ------------'''
-fig,ax= plt.subplots(1,figsize=(10,8))
-da.attrs['long_name']='imgbands';
-# da.isel(band=0).plot.imshow(ax=ax,vmin=0,vmax=1,cbar_kwargs={"fraction": 0.046})
-da.plot.imshow(ax=ax,rgb='band', vmin=0,vmax=1,cbar_kwargs={"fraction": 0.046})
-ax.set_title(tileNum + ' normalised and equalised')
-ax.set_aspect('equal')
-fig.savefig(os.path.join(path_to_traindir , model_dir, 'spatial_lspace_' + tileNum))
+try: 
+    fig,ax= plt.subplots(1,figsize=(10,8))
+    da.attrs['long_name']='imgbands';
+    # da.isel(band=0).plot.imshow(ax=ax,vmin=0,vmax=1,cbar_kwargs={"fraction": 0.046})
+    da.plot.imshow(ax=ax,rgb='band', vmin=0,vmax=1)#,cbar_kwargs={"fraction": 0.046})
+    ax.set_title(tileNum + ' normalised and equalised')
+    ax.set_aspect('equal')
+    fig.savefig(os.path.join(path_to_traindir , model_dir, 'spatial_lspace_' + tileNum))
+except Exception:
+    print('Error for plotting image -- skipped')
+    pass
 
 ''' ----------
 Create cut-outs
@@ -241,11 +268,6 @@ Create cut-outs
 
 tile_cutouts, tile_cutouts_da = create_cutouts2(da,cutout_size) # samples, x_win, y_win, bands: (250000, 20, 20, 1)
 # label_cutouts, __ = create_cutouts(tile_dmg_int, cutout_size)
-
-
-
-
-
 
 
 ''' ----------
