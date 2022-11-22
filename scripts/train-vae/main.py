@@ -42,6 +42,7 @@ def parse_config(config):
     normThreshold = config['normalizationThreshold']
     if normThreshold is not None:
         normThreshold = [float(i) for i in normThreshold.split(" ")]
+    adaptHist = True if config['adaptHistogramEqual'] == 'True' else False
     # MODEL
     filter1 = int(config['filter1'])
     filter2 = int(config['filter2'])
@@ -58,7 +59,7 @@ def parse_config(config):
 #     validationSplit = float(config['validationSplit'])
 
     return (catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile,
-            bands, sizeCutOut, nEpochMax, nEpochTrain, sizeStep, stride, file_DMGinfo, normThreshold,
+            bands, sizeCutOut, nEpochMax, nEpochTrain, sizeStep, stride, file_DMGinfo, normThreshold, adaptHist,
             filter1, filter2, kernelSize1,kernelSize2, denseSize, latentDim,
             alpha, batchSize,learnRate)
 
@@ -68,7 +69,7 @@ def main(config=None):
     # parse input arguments
     config = config if config is not None else "train-vae.ini"
     catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile, \
-        bands, sizeCutOut, nEpochmax, nEpochTrain, sizeStep, stride, file_DMGinfo, normThreshold, \
+        bands, sizeCutOut, nEpochmax, nEpochTrain, sizeStep, stride, file_DMGinfo, normThreshold, adaptHist, \
         filter1, filter2, kernelSize1, kernelSize2, denseSize, latentDim, \
         alpha, batchSize,learnRate = parse_config(config)
     
@@ -116,7 +117,8 @@ def main(config=None):
     # is a preselection step across all data
     test_set = dataset.Dataset(test_set_paths, sizeCutOut, bands,
                                shuffle_tiles=True,
-                               norm_threshold=normThreshold)
+                               norm_threshold=normThreshold,
+                               adapt_hist=adaptHist)
     test_set.set_mask(mask.unary_union, crs=mask.crs)
     test_set_tf = test_set.to_tf() # generates cutuouts
     test_set_tf = test_set_tf.batch(64, drop_remainder=True)
@@ -124,7 +126,8 @@ def main(config=None):
     # balanced validation set (i.e. apply mask)
     val_set = dataset.Dataset(val_set_paths, sizeCutOut, bands,
                               shuffle_tiles=True,
-                              norm_threshold=normThreshold)
+                              norm_threshold=normThreshold,
+                              adapt_hist=adaptHist)
     val_set.set_mask(mask.unary_union, crs=mask.crs)
     val_set_tf = val_set.to_tf()
     val_set_tf = val_set_tf.batch(64, drop_remainder=True)
@@ -150,11 +153,16 @@ def main(config=None):
     vae.compile(optimizer=keras.optimizers.Adam(learning_rate=learnRate)) # default l.rate = 0.001
 
     path = outputDir + '/model_' + str(int(ts))
-    vae.save(os.path.join(path, 'model_epoch_' + str(epochcounter - 1)),save_format="h5")
-    encoder.save(os.path.join(path, 'encoder_epoch_' + str(epochcounter - 1) ), save_format="h5")
+    vae.save(os.path.join(path, 'model_epoch_' + str(epochcounter - 1)))
+    encoder.save(os.path.join(path, 'encoder_epoch_' + str(epochcounter - 1) ))
+    
+    print('\n ----- \n Saving model_{}'.format(str(int(ts))) )
 
     # begin loop
     while epochcounter <= nEpochmax:
+        
+        print('----- Data epoch {}/{}'.format(epochcounter,nEpochmax) )
+        
         offset = (epochcounter - 1)*sizeStep
         while offset >= sizeCutOut: # add offset correction for when offset >= window_size
             offset = offset - sizeCutOut 
@@ -163,21 +171,21 @@ def main(config=None):
                                     offset=offset, 
                                     stride=stride,
                                     shuffle_tiles=True,
-                                    norm_threshold=normThreshold)
+                                    norm_threshold=normThreshold,
+                                    adapt_hist=adaptHist)
         train_set.set_mask(mask.unary_union, crs=mask.crs)
         train_set_tf = train_set.to_tf()
         # train_set_tf = train_set_tf.shuffle(buffer_size=2000000)
         train_set_tf = train_set_tf.batch(64, drop_remainder=True)
-
-        history = vae.fit(train_set_tf, epochs=nEpochTrain, validation_data=val_set_tf)
+        
 #         history = vae.fit(x_train, epochs=1, batch_size=batch_size, validation_split=train_val_split) # validatio_split does not work because we loop all data every epoch (and then its not independent validatoin data)
 
-        # print('Total loss: {} \n Reconstructiion loss: {} \n K-loss: {}'.format(total_loss, reconstruction_loss, kl_loss)) #
-        # print('losses: {}'.format(vae.losses) )
 
-        # change it: make a call to os to create a path
-        vae.save(os.path.join(path, 'model_epoch_' + str(epochcounter)))#,save_format="h5")
-        encoder.save(os.path.join(path, 'encoder_epoch_' + str(epochcounter) ))#,save_format="h5") 
+        history = vae.fit(train_set_tf, epochs=nEpochTrain, validation_data=val_set_tf)
+
+        # save it: make a call to os to create a path
+        vae.save(os.path.join(path, 'model_epoch_' + str(epochcounter)))
+        encoder.save(os.path.join(path, 'encoder_epoch_' + str(epochcounter) ))
         
         # save history dict to jsson
         hist_df = pd.DataFrame(history.history)  

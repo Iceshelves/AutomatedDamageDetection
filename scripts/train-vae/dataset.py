@@ -14,7 +14,7 @@ class Dataset:
     Split tiles into square cutouts and return these as a tensorflow Dataset.
     """
     def __init__(self, tile_list, cutout_size, bands, offset=0, stride=None,
-                 num_tiles=None, shuffle_tiles=False, norm_threshold=None,
+                 num_tiles=None, shuffle_tiles=False, norm_threshold=None, adapt_hist=False,
                  return_coordinates=False,
                  ):
         """
@@ -48,6 +48,7 @@ class Dataset:
         self.invert = None
         self.all_touched = None
         self.norm_threshold = norm_threshold
+        self.adapt_hist = adapt_hist
         self.return_coordinates = return_coordinates
 
     def set_mask(self, geometry, crs, buffer=None, invert=False,
@@ -159,18 +160,20 @@ class Dataset:
                 da = (da - norm_min) / (norm_max - norm_min)
                 da = da.clip(min=0,max=1)
             
-            # histogram adaptive equalization [instead of using normalisation or both?]
-            # TO FIX: hist.equalisation should convert values to range [0,1] or [-1,1] but for some reason it doesnt... so use both normalisation and equalisaton.
-            n_bands = da['band'].shape[0]
-            all_band_eq=np.empty(da.shape)
-
-            for band_i in range(n_bands): # perform adaptive normalisation per band
-                band_data = img_as_float64(da.isel(band=band_i), force_copy=True)
-                #print('.... band data converted to float, dtype: {}, min: {},  max: {}' .format(band_data.dtype, np.nanmin(band_data),np.nanmax(band_data)))
-                band_data_eq = skimage_exposure.equalize_adapthist(band_data, clip_limit=0.03)
-                all_band_eq[band_i] = np.expand_dims(band_data_eq,axis=0)
-
-            da = da.copy(data=all_band_eq) # overwrite data in dataArray
+           
+            
+            if self.adapt_hist:
+                
+                # # TO FIX: hist.equalisation should convert values to range [0,1] or [-1,1] but for some reason it doesnt... so use both normalisation and equalisaton.
+                n_bands = da['band'].shape[0]
+                all_band_eq=np.empty(da.shape)
+                for band_i in range(n_bands): # perform adaptive normalisation per band
+                    band_data = img_as_float64(da.isel(band=band_i), force_copy=True)
+                    #print('.... band data converted to float, dtype: {}, min: {},  max: {}' .format(band_data.dtype, np.nanmin(band_data),np.nanmax(band_data)))
+                    band_data_eq = skimage_exposure.equalize_adapthist(band_data, clip_limit=0.03)
+                    all_band_eq[band_i] = np.expand_dims(band_data_eq,axis=0)
+                    
+                da = da.copy(data=all_band_eq) # overwrite data in dataArray
 
             # apply offset
             da = da.shift(x=self.offset, y=self.offset)
