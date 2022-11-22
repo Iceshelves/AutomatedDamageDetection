@@ -42,7 +42,7 @@ def make_encoder(cutout_size,n_bands,
     x = layers.Conv2D(filter_1, kernel_size_1, activation="relu", strides=2, padding="same")(encoder_inputs)
     x = layers.Conv2D(filter_2, kernel_size_2, activation="relu", strides=2, padding="same")(x)
     # add a third layer (not sure if that makes sense)
-    x = layers.Conv2D(filter_2, kernel_size_2, activation="relu", strides=1, padding="same")(x)
+ #   x = layers.Conv2D(filter_2, kernel_size_2, activation="relu", strides=1, padding="same")(x)
     x = layers.Flatten()(x) # to vector
     x = layers.Dense(dense_size, activation="relu")(x) # linked layer
     z_mean = layers.Dense(latent_dim, name="z_mean")(x)
@@ -65,9 +65,10 @@ def make_decoder(latent_dim,encoder,
     flat_input = flat_layer[-1].input_shape # input shape of flat layer to be used to reconstruct; (None, 5,5,16) or smth
     x = layers.Dense(flat_input[1] * flat_input[2] * filter_2, activation="relu")(latent_inputs) # -- shape corresponding to encoder
     x = layers.Reshape((flat_input[1], flat_input[2], filter_2))(x)
-    x = layers.Conv2DTranspose(filter_2, kernel_size_2, activation="relu", strides=1, padding="same")(x)
-    x = layers.Conv2DTranspose(filter_2, kernel_size_2, activation="relu", strides=2, padding="same")(x)
-    x = layers.Conv2DTranspose(filter_1, kernel_size_1, activation="relu", strides=2, padding="same")(x)
+    # 3Rd conv Layer tryout:
+#    x = layers.Conv2DTranspose(filter_2, kernel_size_2, activation="relu", strides=1, padding="same")(x) # connect to Conv Layer 3
+    x = layers.Conv2DTranspose(filter_2, kernel_size_2, activation="relu", strides=2, padding="same")(x) # connect to Conv Layer 2
+    x = layers.Conv2DTranspose(filter_1, kernel_size_1, activation="relu", strides=2, padding="same")(x) # connect to Conv Layer 1
     decoder_outputs = layers.Conv2DTranspose(n_bands, n_bands, activation="sigmoid", padding="same")(x) # (1,3) or (3,3)
     decoder = keras.Model(latent_inputs, decoder_outputs, name="decoder")
     decoder.summary()
@@ -99,12 +100,14 @@ def make_vae(encoder_inputs, z, z_mean, z_log_var, decoder,alpha=5):
     vae.add_loss(total_loss)
     
     # TMP: use this to get insight in loss components
-    kl_loss2 = alpha * kl_loss
+    # kl_loss2 = alpha * kl_loss
     
+    # NB: do not 'add_loss' for the components, because training should only be on 'total_loss'
 #     vae.add_loss(reconstruction_loss)
 #     vae.add_loss(kl_loss)
 
-    vae.add_metric(kl_loss2, name='kl_loss', aggregation='mean')
+    # TEST: adding metric should be fine
+    vae.add_metric(alpha*kl_loss, name=str(alpha)+'*kl_loss', aggregation='mean')
     vae.add_metric(reconstruction_loss, name='rconstr_loss', aggregation='mean')
     
     return vae
