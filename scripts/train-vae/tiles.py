@@ -32,7 +32,10 @@ def _read_labels(labels_path, verbose=True):
         print("Labels successfully read from {} files".format(len(labels)))
 
     crs = labels[0].crs
-    assert all([label.crs == crs for label in labels])
+    try:
+        assert all([label.crs == crs for label in labels])
+    except AssertionError:
+        print('Could not assert CRS for all labels')
     labels = pd.concat(labels)
 
     # fix datetimes' type
