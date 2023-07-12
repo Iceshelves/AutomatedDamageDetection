@@ -28,6 +28,7 @@ import rasterio as rio
 
 from joblib import Parallel, delayed
 
+print('\n')
 
 def parse_config(config):
     """ Parse input arguments from dictionary or config file """
@@ -55,33 +56,6 @@ def parse_config(config):
         normThreshold = [float(i) for i in normThreshold.split(" ")]
     adaptHist = True if config['adaptHistogramEqual'] == 'True' else False
     
-    # MODEL
-    # filter1 = int(config['filter1'])
-    # filter2 = int(config['filter2'])
-    # try:
-    #     kernelSize1 = int(config['kernelSize1'])
-    #     kernelSize2 = int(config['kernelSize2'])
-    # except KeyError: 
-    #     kernelSize1 = int(config['kernelSize']) # old config
-    #     kernelSize2 = kernelSize1
-    # denseSize = int(config['denseSize'])
-    # latentDim = int(config['latentDim'])
-    #vae:
-    # alpha = float(config['alpha'])
-    # batchSize = int(config['batchSize'])
-    # try:
-    #     nEpochMax = int(config['nEpochData'])
-    #     nEpochTrain = int(config['nEpochTrain'])
-    #     learnRate = float(config['learningRate'])
-    # except KeyError:
-    #     nEpochMax = int(config['nEpochMax']) # old config files
-    #     nEpochTrain = None
-    #     learnRate = None
-        
-    # return (catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile,
-    #         bands, sizeCutOut, nEpochMax, nEpochTrain, sizeStep, stride, file_DMGinfo, normThreshold, adaptHist,
-    #         filter1, filter2, kernelSize1,kernelSize2, denseSize, latentDim,
-    #         alpha, batchSize,learnRate)
 
     return (catPath, labPath, outputDir, 
             bands, sizeCutOut, normThreshold, adaptHist,
@@ -223,156 +197,174 @@ def predict_and_save_tile( tiles_path, tileNum,
     ## Filename of prediction
     tilePredict_fileName = '{}_model_{}_epoch{}_predict.tif'.format(tileName,model_dir.split('_')[1],epoch_num)
     
-    if os.path.exists( os.path.join(path2save, tilePredict_fileName )):
-        print('----\n Already predicted tile {}; continue'.format(tileNum))
-        # continue
-    else: 
-        print('----\n Processing ' + tileName )
-
+#     if os.path.exists( os.path.join(path2save, tilePredict_fileName )):
+#         print('Already predicted tile {}; continue'.format(tileNum))
+#         # continue
+#     else: 
+#         print('----\n Processing ' + tileName )
         
+#         if not os.path.isfile(tile_file):
+#             print('----\n No tile found for {}; continue'.format(tileNum))
+#         else:
+#             print('.. do processing')
+            
+    return tile_file, tilePredict_fileName
+
+# def define_prediction_filename(image_filepath, model_dir, epoch_num ):
+#     # tile_file = os.path.join(tiles_path,'S2_composite_2019-11-1_2020-3-1_tile_' + str(tileNum) + '.tif')
+#     # tileName = image_filepath.split("/")[-1][:-4] # vb: 'S2_composite_2019-11-1_2020-3-1_tile_124'
+#     image_filename = image_filepath.stem # /path/to/img_file.tif --> img_file
+#     model_id = model_dir.split('_')[1] # model_1684233861_L2_w20_k5_f16_a20... --> model_1684233861
+    
+#     predict_fileName = '{}_model_{}_epoch{}_predict.tif'.format(image_filename,model_id,epoch_num)
+    
+            
+def process_image( image_file, predict_fileName,
+                    encoder, model_dir, epoch_num, 
+                    bands , cutout_size, normThreshold, adaptHist,
+                    path2save='./'  ) :
+    
+    ''' ----------
+    Create cut-outs
+        Actually read the tile, make cutouts, linked with labeldata
+    ------------'''
+    
+    # if not os.path.isfile(image_file):
+    #     print('----\n No tile found for {}; continue'.format(tileNum))
+    #     # continue
+    # else:
+
+    with rioxr.open_rasterio(image_file).astype("float32") as da:
+
+        # select bands
+        if bands is not None:
+            if type(bands) is not list:
+                da = da.sel(band=[bands])
+            else:
+                da = da.sel(band=bands)
+
+
+        ''' ----------
+        Mask ocean
+        - not required for predicting -- so do lateron 
+        ------------'''
+
+        # mask/clip: if self.mask is not None: [not needed for prediction]
+        # da = mask_data(da,oceanmask_file)
+
+
+        ''' ----------
+        Normalise and Equalise
+        ------------'''
+
+        da = normalise_and_equalise(da,normThreshold=normThreshold[0],equalise=adaptHist)
+        print('.. normalised data')
+
         ''' ----------
         Create cut-outs
-            Actually read the tile, make cutouts, linked with labeldata
+        - First fill NaN values so that they are not dropped during cut-out construction
+        - Store a mask of the NaN values so that they can be returned later
         ------------'''
-        
-        # try:
-        #     # read tile - floats are required to mask with NaN's
-        #     da = rioxr.open_rasterio(tile_file).astype("float32")
-        # except rio.errors.RasterioIOError:
-        #     print('----\n No tile found for {}; continue'.format(tileNum))
-        #     # continue
-        # else: 
-        #     pass
-        if not os.path.isfile(tile_file):
-            print('----\n No tile found for {}; continue'.format(tileNum))
+
+        ## Create mask -- by omitting the ocean-mask step, there are no NaN values expectedi n the data. 
+        # We could mask them, but then also need to aggregate them to window-values to be able to put them on the labels later. Seems like unnecessary steps if it is not needed.
+        if np.isnan(da).any():
+            mask_nan = np.isnan(da).sum(dim='band') # .astype(bool)
+            da = da.fillna(-999)
+            # raise ValueError('Tiledata has NaN values -- need to mask these')
+            mask_nan_cutouts = create_cutouts2(mask_nan,cutout_size).sum(axis=1).sum(axis=1) # has value > 0 if any px in window has a NaN value
+            mask_nan_pred = mask_nan_cutouts.where(mask_nan_cutouts == 0, 1).astype(bool) # yields True (1) for nan-containing windows
         else:
+            mask_nan_pred = None
 
-            with rioxr.open_rasterio(tile_file).astype("float32") as da:
-
-                # select bands
-                if bands is not None:
-                    if type(bands) is not list:
-                        da = da.sel(band=[bands])
-                    else:
-                        da = da.sel(band=bands)
+        # generate windows -- cut 
+        _, tile_cutouts_da = create_cutouts2(da,cutout_size) # samples, x_win, y_win, bands: (250000, 20, 20, 3)
+        # print('cutouts {} '.format(tile_cutouts.shape))
 
 
-                ''' ----------
-                Mask ocean
-                - not required for predicting -- so do lateron 
-                ------------'''
+        ''' ----------
+        Encode data
+        ------------'''
 
-                # mask/clip: if self.mask is not None: [removed; see _generate_cutouts]
-                # da = mask_data(da,oceanmask_file)
+        encoded_data,_,_ = encoder.predict(tile_cutouts_da.data);
+
+        z0 = encoded_data[:,0]
+        z1 = encoded_data[:,1]
+
+        ''' ----------------------------------------
+        Predict cluster type for all pixels: Threshold
+        -----------------------------------------------'''
+
+        ## Sort latent space values so can threshold values of Z1 based on Z0
+        i_sort = np.argsort(z0)
+        z1_sorted = z1[i_sort]
+        z0_sorted = z0[i_sort]
+
+        # set up sequence for x-axis
+        z0_seq = np.linspace(np.nanmin(z0),np.nanmax(z0),len(z0) )
+
+        ## Define cluster (all samplesa bove threshold) 
+
+        if model_dir == 'model_1684233861_L2_w20_k5_f16_a20' and epoch_num == '9': # for model_1684233861 (16 may 23)
+            dzdz = (0.005)/(1)
+            dzdz = (0.06)/2
+            c = 0.01 #0 
+            z0_seq = np.linspace(np.nanmin(z0),np.nanmax(z0),len(z0) )
+            z1_treshold_val = dzdz*z0_seq + c 
+
+            # -- extract samples in cluster
+            # idx_cluster_sorted = np.less(z1_sorted, z1_treshold_val).astype(int)
+            idx_cluster_sorted = np.greater(z1_sorted, z1_treshold_val).astype(int)
+            print('Extract samples GREATER THAN line: Z1 = {:.2f}*Z0 + {:.2f}'.format( dzdz, c ) ) 
+
+        else:
+            raise ValueError('Cluster extraction method is not defined for specified model {} -- update code', model_dir)
+
+        ## -- Reverse sort of latent space to recover spatial relations of samples
+        idx_cluster = idx_cluster_sorted[np.argsort(i_sort)] # (Nsamples,)
 
 
-                ''' ----------
-                Normalise and Equalise
-                ------------'''
-                
-                da = normalise_and_equalise(da,normThreshold=normThreshold[0],equalise=adaptHist)
-                print('.. normalised data')
+        ''' ----------
+        Put predicted labels in dataArray; plot and save
+        ------------'''
 
-                ''' ----------
-                Create cut-outs
-                - First fill NaN values so that they are not dropped during cut-out construction
-                - Store a mask of the NaN values so that they can be returned later
-                ------------'''
-                
-                ## Create mask -- by omitting the ocean-mask step, there are no NaN values expectedi n the data. 
-                # We could mask them, but then also need to aggregate them to window-values to be able to put them on the labels later. Seems like unnecessary steps if it is not needed.
-                if np.isnan(da).any():
-                    mask_nan = np.isnan(da).sum(dim='band') # .astype(bool)
-                    da = da.fillna(-999)
-                    # raise ValueError('Tiledata has NaN values -- need to mask these')
-                    mask_nan_cutouts = create_cutouts2(mask_nan,cutout_size).sum(axis=1).sum(axis=1) # has value > 0 if any px in window has a NaN value
-                    mask_nan_pred = mask_nan_cutouts.where(mask_nan_cutouts == 0, 1).astype(bool) # yields True (1) for nan-containing windows
-                else:
-                    mask_nan_pred = None
-                
-                # generate windows -- cut 
-                _, tile_cutouts_da = create_cutouts2(da,cutout_size) # samples, x_win, y_win, bands: (250000, 20, 20, 3)
-                # print('cutouts {} '.format(tile_cutouts.shape))
-                
-                
-                ''' ----------
-                Encode data
-                ------------'''
+        ## place the cluster indices in an xarray and unstack to spatial img
+        idx_cluster_da = tile_cutouts_da.isel(band=0,x_win=0,y_win=0).copy(deep=True, data=idx_cluster) # (Nsamples)
+        cluster_da     = idx_cluster_da.unstack().transpose('y','x') # (Nsamples) --> (x, y) 
 
-                encoded_data,_,_ = encoder.predict(tile_cutouts_da.data);
+        ## Re-apply nan mask
+        if mask_nan_pred:
+            cluster_da = cluster_da.where(~mask_nan,np.nan)
 
-                z0 = encoded_data[:,0]
-                z1 = encoded_data[:,1]
+        # ## Plot
+        # fig,ax=plt.subplots(figsize=(6,5))
+        # cluster_da.plot.imshow(ax=ax,label=''); ax.set_axis_off(); ax.set_title('');
 
-                ''' ----------------------------------------
-                Predict cluster type for all pixels: Threshold
-                -----------------------------------------------'''
-
-                ## Sort latent space values so can threshold values of Z1 based on Z0
-                i_sort = np.argsort(z0)
-                z1_sorted = z1[i_sort]
-                z0_sorted = z0[i_sort]
-
-                # set up sequence for x-axis
-                z0_seq = np.linspace(np.nanmin(z0),np.nanmax(z0),len(z0) )
-
-                ## Define cluster (all samplesa bove threshold) 
-                
-                if model_dir == 'model_1684233861_L2_w20_k5_f16_a20' and epoch_num == '9': # for model_1684233861 (16 may 23)
-                    dzdz = (0.005)/(1)
-                    dzdz = (0.06)/2
-                    c = 0.01 #0 
-                    z0_seq = np.linspace(np.nanmin(z0),np.nanmax(z0),len(z0) )
-                    z1_treshold_val = dzdz*z0_seq + c 
-
-                    # -- extract samples in cluster
-                    # idx_cluster_sorted = np.less(z1_sorted, z1_treshold_val).astype(int)
-                    idx_cluster_sorted = np.greater(z1_sorted, z1_treshold_val).astype(int)
-                    print('Extract samples GREATER THAN line: Z1 = {:.2f}*Z0 + {:.2f}'.format( dzdz, c ) ) 
-                    
-                else:
-                    raise ValueError('Cluster extraction method is not defined for specified model {} -- update code', model_dir)
-                
-                ## -- Reverse sort of latent space to recover spatial relations of samples
-                idx_cluster = idx_cluster_sorted[np.argsort(i_sort)] # (Nsamples,)
-
-                
-                ''' ----------
-                Put predicted labels in dataArray; plot and save
-                ------------'''
-                
-                ## place the cluster indices in an xarray and unstack to spatial img
-                idx_cluster_da = tile_cutouts_da.isel(band=0,x_win=0,y_win=0).copy(deep=True, data=idx_cluster) # (Nsamples)
-                cluster_da     = idx_cluster_da.unstack().transpose('y','x') # (Nsamples) --> (x, y) 
-
-                ## Re-apply nan mask
-                if mask_nan_pred:
-                    cluster_da = cluster_da.where(~mask_nan,np.nan)
-                            
-                # ## Plot
-                # fig,ax=plt.subplots(figsize=(6,5))
-                # cluster_da.plot.imshow(ax=ax,label=''); ax.set_axis_off(); ax.set_title('');
-                
-                ### Save
-                cluster_da = cluster_da.astype('uint8') # convert binary data to byte (otherwise loading error from GCS to GEE)
-                cluster_da.rio.to_raster(  os.path.join(path2save, tilePredict_fileName ), driver="COG") # use CloudOptimisedGeotiff so it can be used together with GEE
-                print('Save predicted tile to {}'.format(tilePredict_fileName))
-                # print('----')
+        ### Save
+        cluster_da = cluster_da.astype('uint8') # convert binary data to byte (otherwise loading error from GCS to GEE)
+        cluster_da.rio.to_raster(  os.path.join(path2save, predict_fileName ), driver="COG") # use CloudOptimisedGeotiff so it can be used together with GEE
+        print('Save predicted tile to {}'.format(predict_fileName))
+        # print('----')
 
 ''' -------------
 
    MAIN
    
 -----------------'''
-def main(encoder_dir):
+def main(encoder_dir, data_dir=None):
+    
+    print('---- Config -----')
     
     ''' ----------
-    Define model to load
+    Get model to load
     ------------'''
     
     if encoder_dir is None:
         raise NameError('No encoder specified. Run script as "python this_script.py /path/to/model_dir/encoder_dir"')
     
+    if encoder_dir[-1] == '/': # trailing slash gives an error somewhere lateron; remove
+        encoder_dir = encoder_dir[:-1]
+    # Update relative path to full path if needed
     if os.path.isdir(encoder_dir):
         path_to_encoder_epoch = encoder_dir
     else:
@@ -381,6 +373,29 @@ def main(encoder_dir):
     ## Retrieve master directory and its name
     path_to_model = os.path.split(path_to_encoder_epoch)[0]
     model_dir = os.path.basename(path_to_model)
+    
+    ''' ----------
+    Get path to data to process; define path to save predictions
+    --------------'''
+    if data_dir is None:
+        data_dir = '/projects/0/einf512/S2_composite_2019-11-1_2020-3-1'
+        print('.. No path to data specified; assuming same path as train-data: {}'.format(tiles_path) )
+    else:
+        print('.. Reading data from     {}'.format(data_dir))
+
+    if data_dir[-1] == '/': # trailing slash gives an error somewhere lateron; remove
+        data_dir = data_dir[:-1]
+            
+    ## Define path to save data
+    data_identifier = data_dir.split('/')[-1]
+    path2save = os.path.join('/projects/0/einf512/VAE_predictions/',data_identifier)
+    if not os.path.isdir(path2save):
+        print('.. Creating savepath directory')
+        os.makedirs(path2save, exist_ok=False)
+    
+    # path2save = '/projects/0/einf512/VAE_predictions/S2_composite_2019-11-1_2020-3-1/'
+    print('.. Save predictions to:  {}'.format(path2save) )
+    tiles_path = data_dir
     
     ''' ----------
     Parse input arguments
@@ -403,61 +418,116 @@ def main(encoder_dir):
     Load model/encoder
     ------------'''
 
+    print('.. Loaded encoder       {}'.format(path_to_encoder_epoch) )
+    
     epoch_num = path_to_encoder_epoch.split('_')[-1]
     encoder = tf.keras.models.load_model(path_to_encoder_epoch,compile=False) # compile=True does not work
     
     # Get latent_dim (of sampling layer)
     latent_dim = encoder.layers[-1].output_shape[-1] 
     
-    print('----\n loaded encoder {}'.format(path_to_encoder_epoch) )
     
     
     ''' ----------
-    Get tile to process
+    Get files to process
     --------------'''
     
-    ## Path to data
-    tiles_path = '/projects/0/einf512/S2_composite_2019-11-1_2020-3-1/'
+    file_list = glob.glob(os.path.join(data_dir, '*.tif'))
     
-    ## Define path to save data
-    path2save = '/projects/0/einf512/VAE_predictions/S2_composite_2019-11-1_2020-3-1/'
+    tile_filelist = [fname for fname in file_list if '_tile_' in fname]
+    img_filelist = [fname for fname in file_list if not '_tile_' in fname]
     
-    # TRAINIING tilenums
-    # tile_nums = [102,110,114,123,124,139,140,142,205,206,214,228,238,250,268,273,28,282,285,291,301,302,307,50,68,93]
-    # tile_nums = [28, 50,53,123,124,140] # 68, 102,110,114,123,124]
-    # tile_nums = [28, 50, 140] # with new manual AND nerd-labels
-    # tile_nums = [140] # with new manual AND nerd-labels
+    print('.. Tile files in dir: {}, other files: {}'.format(len(tile_filelist), len(img_filelist) ) )
     
-    # TEST tilenums
-    #tile_nums = [0, 3, 4, 42, 51, 52, 53, 54, 55, 61, 124, 140, 276, 285, 286] # all tiles in DJF 19-20 tht have mnual labels
+    if tile_filelist: # if non-empty list: process tile_files
 
-    # ALL tiles
-    tile_nums = np.arange(0,313)
-    
-    # Parallel(n_jobs=5)(delayed( predict_and_save_tile)( tiles_path, tileNum, 
-    #                         encoder, model_dir, epoch_num, 
-    #                         bands , cutout_size, normThreshold, adaptHist,
-    #                         path2save=path2save )
-    #                     for tileNum in tile_nums )
-    
+        # TRAINIING tilenums
+        # tile_nums = [102,110,114,123,124,139,140,142,205,206,214,228,238,250,268,273,28,282,285,291,301,302,307,50,68,93]
+        # tile_nums = [28, 50,53,123,124,140] # 68, 102,110,114,123,124]
+        # tile_nums = [28, 50, 140] # with new manual AND nerd-labels
+        # tile_nums = [140] # with new manual AND nerd-labels
 
-    for tileNum in tile_nums:
+        # TEST tilenums
+        #tile_nums = [0, 3, 4, 42, 51, 52, 53, 54, 55, 61, 124, 140, 276, 285, 286] # all tiles in DJF 19-20 tht have mnual labels
 
-        predict_and_save_tile( tiles_path, tileNum, 
-                            encoder, model_dir, epoch_num, 
-                            bands , cutout_size, normThreshold, adaptHist,
-                            path2save=path2save  )
-    
+        # ALL tiles
+        tile_nums = np.arange(58,63) # (0,313)
+
+        # Parallel(n_jobs=5)(delayed( predict_and_save_tile)( tiles_path, tileNum, 
+        #                         encoder, model_dir, epoch_num, 
+        #                         bands , cutout_size, normThreshold, adaptHist,
+        #                         path2save=path2save )
+        #                     for tileNum in tile_nums )
+
+        print('---- Processing -----')
+
+        for tileNum in tile_nums:
+            
+            # predict_and_save_tile( tiles_path, tileNum, 
+            #                     encoder, model_dir, epoch_num, 
+            #                     bands , cutout_size, normThreshold, adaptHist,
+            #                     path2save=path2save  )
+            
+            tile_file, tilePredict_fileName = predict_and_save_tile( tiles_path, tileNum, 
+                                encoder, model_dir, epoch_num, 
+                                bands , cutout_size, normThreshold, adaptHist,
+                                path2save=path2save  )
+            
+            if os.path.exists( os.path.join(path2save, tilePredict_fileName )):
+                print('Already predicted tile {}; continue'.format(tileNum))
+                # continue
+            else: 
+                print('----\n Processing ' + tile_file )
+
+                if not os.path.isfile(tile_file):
+                    print('.. No tile found for {}; continue\n--'.format(tile_file))
+                else:
+                    process_image( tile_file, tilePredict_fileName,
+                        encoder, model_dir, epoch_num, 
+                        bands , cutout_size, normThreshold, adaptHist,
+                        path2save=path2save  )
+
+            
+
+    elif img_filelist:
+        print('---- Processing -----')
+         
+        for image_filepath in img_filelist:
+            
+            # print('img filename: {}'.format(img_file))
+            # predict_fileName = 'test_img'
+            # print('predict filename: {}'.format(predict_fileName))
+            
+            image_filename = pathlib.Path(image_filepath).stem # /path/to/img_file.tif --> img_file
+            model_id = model_dir.split('_')[1] # model_1684233861_L2_w20_k5_f16_a20... --> model_1684233861
+
+            predict_fileName = '{}_model_{}_epoch{}_predict.tif'.format(image_filename,model_id,epoch_num)
+            
+            if os.path.exists( os.path.join(path2save, predict_fileName )):
+                print('Already predicted file {}; continue'.format(image_filename))
+                continue
+           
+            print('----\n Processing ' + image_filename )
+
+            
+            process_image( image_filepath, predict_fileName,
+                    encoder, model_dir, epoch_num, 
+                    bands , cutout_size, normThreshold, adaptHist,
+                    path2save= path2save  ) 
+            
+        
         
     print('----\nDone')
 
 if __name__ == '__main__':
     #  Run script as "python path/to/script.py /path/to/model/encoder_dir"
+    #  Run script as "python path/to/script.py /path/to/model/encoder_dir /path/to/data/to/predict"
         
     # retrieve config filename from command line
     encoder_dir = sys.argv[1] if len(sys.argv) > 1 else None
+    data_dir = sys.argv[2] if len(sys.argv) > 2 else None
 
     # run script
-    main(encoder_dir)   
+    main(encoder_dir, data_dir)   
 
 
