@@ -109,9 +109,9 @@ def main(configFile):
     ''' ----------------------------------------------------------
             Export all images to Asset
     -------------------------------------------------------------- '''
-    if not start_upload:
-        print('.. Did not start upload tasks; set start_task to True')   
-        exit()
+    # if not start_upload:
+    #     print('.. Did not start upload tasks; set start_task to True')   
+    #     exit()
 
     # files_to_upload = gcloud_tif_crevSig # maybe filter this list for files that already exist? -- if img aalready exists in imCol the task yields an error
     print('.. Uploading to Asset: {}'.format(asset_ID))
@@ -129,6 +129,7 @@ def main(configFile):
         bandNames = cloudImage.bandNames().getInfo()
         if len(bandNames) == 1: # if img has 1 band, assume it is predicted dmg band
             cloudImage = cloudImage.rename('dmg')
+            bandName = 'dmg'
 
         
         ''' -----------------
@@ -137,8 +138,8 @@ def main(configFile):
 
         img_name = os.path.basename(gcFile)
 
-        if "S2" in img_name:
-            if "predict" in img_name:
+        if "S2_composite" in img_name:
+            if "predict" in img_name :
                 # print(img_name.split('_'))
                 # print([is_datetime(part,date_format='%Y-%m-%d') for part in img_name.split('_')])
 
@@ -161,13 +162,59 @@ def main(configFile):
                                                         'epoch_num':epoch_num}
                                             })   
 
-                fileName = img_name.split('_tile')[0] + '_VAE-predicted-dmg_' + tileNum  # filename without varName and file extention
+                fileName = img_name.split('_tile')[0] + '_VAE-predicted-dmg_' + tileNum  
         
             else: # handling original data tile
                 fileName = img_name.split('.')[0] # remove .tif extension
+                print(fileName)
+        elif img_name.startswith("S2_MGRStile"): # in img_name:
+            ee_img_id = img_name.replace('S2_MGRStile_','')
+            # define filename for in Asest Collection
+            fileName = img_name.split('.')[0]  # remove .tif extension
+
+            # infer information from img name
+            img_dates = [is_datetime(part,date_format='%Y%m%dT%H%M%S').strftime("%Y-%m-%d") \
+                            for part in img_name.split('_') \
+                                if is_datetime(part,date_format='%Y%m%dT%H%M%S') is not None] # date in 'YYYY-mm-dd'
+
+            model_id = 'model_'+ re.search('model_(.+?)_', img_name).group(1) 
+            epoch_num = 'epoch_'+re.search('epoch(.+?)_', img_name).group(1) 
+
+            img_date_start = img_dates[0]
+            img_date_end = img_dates[1]
+
+            cloudImage = cloudImage.set({'system:time_start':ee.Date(img_date_start).millis(), 
+                                         'system:time_end':ee.Date(img_date_end).millis(), 
+                                         'input_img_source':'S2_SR_HARMONIZED',
+                                         'input_img_ID':ee_img_id,
+                                         'model_info':{ 'model_id':model_id,
+                                                        'epoch_num':epoch_num},
+                                        })   
+
+        # TMP: export mask separately. TO DO: include this in uploading S2_MGRStile as a band
+        if img_name.startswith('mask_S2_MGRStile'):
+            ee_img_id = img_name.replace('mask_S2_MGRStile_','')
+            cloudImage = cloudImage.rename('mask')
+            bandName = 'mask'
+            # define filename for in Asest Collection
+            fileName = img_name.split('.')[0]  # remove .tif extension
+
+            # infer information from img name
+            img_dates = [is_datetime(part,date_format='%Y%m%dT%H%M%S').strftime("%Y-%m-%d") \
+                            for part in img_name.split('_') \
+                                if is_datetime(part,date_format='%Y%m%dT%H%M%S') is not None] # date in 'YYYY-mm-dd'
+            img_date_start = img_dates[0]
+            img_date_end = img_dates[1]
+            cloudImage = cloudImage.set({'system:time_start':ee.Date(img_date_start).millis(), 
+                                         'system:time_end':ee.Date(img_date_end).millis(), 
+                                         'input_img_source':'S2_SR_HARMONIZED',
+                                         'input_img_ID':ee_img_id,
+                                         'bandNames':bandName,
+                                        })   
+
         else:
-            raise Exception('Could not include metadata; only accounted for predicted S2 composites ' )
-        
+            raise Exception('Could not include metadata; only accounted for predicted S2_composites / S2_MGRStiles ' )
+
         ''' -----------------
         Create upload task
         ---------------------'''
@@ -192,8 +239,8 @@ def main(configFile):
             task.start()
         counter=counter+1
 
-    # if not start_upload:
-    #     print('.. Did not start upload tasks; set start_task to True')    
+    if not start_upload:
+        print('.. Did not start upload tasks; set start_task to True')    
     print('Done')
 
 
