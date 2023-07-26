@@ -14,7 +14,7 @@ scripts/train-vae/__pycache__/
 # directories
 training/
 tests/
-notebooks/development/
+archive/
 
 # specific files
 scripts/train-vae/train-vae-S1.ini
