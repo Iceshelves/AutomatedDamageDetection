@@ -116,6 +116,8 @@ def main(configFile):
     # files_to_upload = gcloud_tif_crevSig # maybe filter this list for files that already exist? -- if img aalready exists in imCol the task yields an error
     print('.. Uploading to Asset: {}'.format(asset_ID))
     counter = 1
+    if not start_upload:
+        gcloud_tif_toUpload = gcloud_tif_toUpload[:10] # test first files
     for gcFile in gcloud_tif_toUpload:
         # print('upload {}/{}'.format(counter, n_files ) )
 
@@ -168,9 +170,15 @@ def main(configFile):
                 fileName = img_name.split('.')[0] # remove .tif extension
                 print(fileName)
         elif img_name.startswith("S2_MGRStile"): # in img_name:
-            ee_img_id = img_name.replace('S2_MGRStile_','')
+            ee_img_id = img_name.replace('S2_MGRStile_','').split('_model')[0]
             # define filename for in Asest Collection
             fileName = img_name.split('.')[0]  # remove .tif extension
+
+            # get mask file to add as band (Did not upload this yet!!)
+            mask_gcdir = 'gs://ee-data_export/data_S2_MGRStiles/imgs_masks/'
+            mask_name = 'mask_' + img_name
+            maskImage = ee.Image.loadGeoTIFF(gcFile).select('B2').rename('mask') # the mask file has 3 bands (all masks); select one
+            # add mask to image as band
 
             # infer information from img name
             img_dates = [is_datetime(part,date_format='%Y%m%dT%H%M%S').strftime("%Y-%m-%d") \
@@ -193,12 +201,12 @@ def main(configFile):
 
         # TMP: export mask separately. TO DO: include this in uploading S2_MGRStile as a band
         if img_name.startswith('mask_S2_MGRStile'):
-            ee_img_id = img_name.replace('mask_S2_MGRStile_','')
-            cloudImage = cloudImage.rename('mask')
+            ee_img_id = img_name.replace('mask_S2_MGRStile_','').split('.')[0]
+            cloudImage = cloudImage.select('B2').rename('mask') # the mask file has 3 bands (all masks); select one
             bandName = 'mask'
             # define filename for in Asest Collection
             fileName = img_name.split('.')[0]  # remove .tif extension
-
+            # print(cloudImage.getInfo())
             # infer information from img name
             img_dates = [is_datetime(part,date_format='%Y%m%dT%H%M%S').strftime("%Y-%m-%d") \
                             for part in img_name.split('_') \
