@@ -263,8 +263,12 @@ def process_image( image_file, predict_fileName,
         ''' ----------
         Create cut-outs
         - First fill NaN values so that they are not dropped during cut-out construction
+          This is important to be able to reconstruct spatial image after prediction.
         - Store a mask of the NaN values so that they can be returned later
         ------------'''
+        ## Check if data contains a general no-data value instead of NaN
+        # (included for exported S2_MGRS tiles)
+        da = da.where(da!=-999, other=np.nan)
 
         ## Create mask -- by omitting the ocean-mask step, there are no NaN values expectedi n the data. 
         # We could mask them, but then also need to aggregate them to window-values to be able to put them on the labels later. Seems like unnecessary steps if it is not needed.
@@ -396,9 +400,9 @@ def main(encoder_dir, data_dir=None):
     # path2save = '/projects/0/einf512/VAE_predictions/S2_composite_2019-11-1_2020-3-1/'
     print('.. Save predictions to:  {}'.format(path2save) )
     tiles_path = data_dir
-    
+
     ''' ----------
-    Parse input arguments
+    Parse model input arguments
     ------------'''
     # config = glob.glob(path_to_traindir + "train-vae.ini")
     # config = os.path.join(path_to_model,'train-vae.ini')
@@ -407,10 +411,6 @@ def main(encoder_dir, data_dir=None):
     if not config:
         raise ValueError('Did not find configfile in directory', path_to_model)
     
-    # catPath, labPath, outputDir, sizeTestSet, sizeValSet, roiFile, \
-    #         bands, cutout_size, nEpochmax, nEpochTrain, sizeStep, stride, file_DMGinfo, normThreshold,adaptHist, \
-    #         filter1, filter2, kernelSize1, kernelSize2, denseSize, latentDim, \
-    #         alpha, batchSize,learnRate = parse_config(config)
     catPath, labPath, outputDir, \
             bands, cutout_size, normThreshold, adaptHist = parse_config(config)
     
@@ -493,10 +493,6 @@ def main(encoder_dir, data_dir=None):
         print('---- Processing -----')
          
         for image_filepath in img_filelist:
-            
-            # print('img filename: {}'.format(img_file))
-            # predict_fileName = 'test_img'
-            # print('predict filename: {}'.format(predict_fileName))
             
             image_filename = pathlib.Path(image_filepath).stem # /path/to/img_file.tif --> img_file
             model_id = model_dir.split('_')[1] # model_1684233861_L2_w20_k5_f16_a20... --> model_1684233861
