@@ -18,20 +18,26 @@ iceShelves = ee.FeatureCollection('users/izeboudmaaike/ne_10m_antarctic_ice_shel
     Functions
 ---------------------'''
 
-def maskS2clouds(image):
-    qa = ee.Image(image).select('QA60')
-    
-    # Bits 10 and 11 are clouds and cirrus, respectively.
-    cloudBitMask = 1 << 10
-    cirrusBitMask = 1 << 11
-    
-    # Both flags should be set to zero, indicating clear conditions.
-    mask = qa.bitwiseAnd(cloudBitMask).eq(0) \
-        .And(qa.bitwiseAnd(cirrusBitMask).eq(0)) \
-        .focal_min(radius=20e3, units='meters') # Add (generous) buffer to mask
-    return image.updateMask(mask)
+# Functions
+def add_rel_orb_num_cycle(eeImage):
+    relorb_slice = ee.Number(eeImage.get('relativeOrbitNumber_start')).format('%.0f').cat('_').cat(ee.Number(eeImage.get('sliceNumber')).format('%.0f'))
+    return eeImage.set('relorb_slice', relorb_slice)
 
+def get_imCol_relorbs(image):
+    s1_relorb = ee.ImageCollection('COPERNICUS/S1_GRD').filter(ee.Filter.eq("system:index", image.getString('relorb_id')))
+    return ee.Image(s1_relorb.first())
 
+def merge_slices_per_day(imCol, datelist):
+    day_mosaic_list = []
+    for day in datelist:
+        day_slices = imCol.filterDate(ee.Date(day), ee.Date(day).advance(1,'day'))
+        slice_numbers = day_slices.aggregate_array('sliceNumber').distinct()
+        properties = {'date': ee.Date(day).format('YYYY-MM-dd'),
+                      'slice_numbers': slice_numbers.getInfo(),
+                      'slice_ids': day_slices.aggregate_array('system:index').distinct().getInfo()
+                      }
+        day_mosaic_list.append(day_slices.mosaic().set(properties) )
+    return day_mosaic_list
 
 def main(configFile):
     '''This function exports Sentinel-1 data from the Google Earth Engine (GEE) to the Google Cloud Storage Bucket (GCS).
@@ -60,66 +66,61 @@ def main(configFile):
         if bucket_subdir[-1] != '/':
             bucket_subdir += '/' # add trailing "/" if not present
 
+    scale = int(config['DATA']['imRes']) # test scale
+    mode = config['DATA']['mode']
+    orbit = config['DATA']['orbitPass']
     t_strt = config['DATA']['t_strt']
     t_end = config['DATA']['t_end']
     bnds = config['DATA']['bnds'] 
-    bnds = bnds.split(', ') # split string-list to list of string
     CRS = config['DATA']['CRS']
-    scale = int(config['DATA']['imRes']) # test scale
     start_export = True if config['DATA']['start_export'] == 'True' else False
-    export_mask = True if config['DATA']['export_mask'] == 'True' else False
-    # try:
-    #     nodata_value = int(config['DATA']['fill_nodata'])
-    # except:
-    #     nodata_value = None
-    # print('..Loaded settings. Fill no data: {}'.format(nodata_value) )
+    
+    relorb_num = int(config['DATA']['relorbNumber'])
 
-    filename_prefix = 'S2_MGRStile_' 
+    # Select ROI
+    PineIsland = ee.Geometry.Polygon(
+        [[[-102.02909017852227, -74.76139200530943],
+        [-102.02909017852227, -75.46684365487192],
+        [-98.44754720977227, -75.46684365487192],
+        [-98.44754720977227, -74.76139200530943]]], None, False)
+    export_geometry = PineIsland
 
-    ## Filter info
-    meta_filters_lt = config._sections['METAFILTERS_less_than'] # reads items to dict; but reads items as string isntead of values
-    for key in meta_filters_lt.keys():
-        meta_filters_lt[key] = ast.literal_eval(meta_filters_lt[key]) # use ast instead of json, as this has no issues with loading "None" or boolean values
-    print(meta_filters_lt) 
-
-    meta_filters_gt = config._sections['METAFILTERS_greater_than']
-    for key in meta_filters_gt.keys():
-        meta_filters_gt[key] = ast.literal_eval(meta_filters_gt[key]) # use ast instead of json, as this has no issues with loading "None" or boolean values
-    print(meta_filters_gt)
+    print('Loaded settings: \n \
+        mode:        {}\n \
+        bucket:      {}\n \
+        orbitPass:   {}\n \
+        bands:       {}\n \
+        dateRange:   {} to {}\n \
+        relorb_num:  {} \
+        '.format(mode,my_bucket,orbit, bnds,t_strt, t_end ,relorb_num))  
 
     ''' ---------------------------------------------------------------------------
             Select all images
     -------------------------------------------------------------- '''
 
     # Load collection & apply standard metadata filters
-    imCol = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED") \
-            .filterBounds(gridTiles_iceShelves) \
-            .filterDate(t_strt, t_end) \
-            # .filterMetadata('CLOUDY_PIXEL_PERCENTAGE', 'less_than', 20) \
-            # .sort('CLOUDY_PIXEL_PERCENTAGE', True)
+    imCol = (ee.ImageCollection('COPERNICUS/S1_GRD')
+            .filterDate(t_strt, t_end)
+            .filter(ee.Filter.listContains('transmitterReceiverPolarisation', bnds))
+            .filterMetadata('instrumentMode', 'equals', mode)
+            .filter(ee.Filter.eq('orbitProperties_pass', orbit))
+            .filterBounds(iceShelves)
+            .map(add_rel_orb_num_cycle))
 
-    # Further improve image collection filters
-    # col_improved = col.filterMetadata('CLOUDY_PIXEL_PERCENTAGE', 'less_than', 1) \
-    #                 .filterMetadata('THIN_CIRRUS_PERCENTAGE', 'less_than', 1) \
-    #                 .filterMetadata('DARK_FEATURES_PERCENTAGE', 'less_than', 10) \
-    #                 .filterMetadata('NODATA_PIXEL_PERCENTAGE', 'less_than', 20) \
-    #                 .filterMetadata('SNOW_ICE_PERCENTAGE', 'greater_than', 10)
-    
-    for filter_property in meta_filters_lt.keys():
-        filter_value = meta_filters_lt[filter_property]
-        imCol = imCol.filterMetadata(filter_property.upper(), 'less_than', filter_value )
-    
+    # select relorb number
+    imCol_relorb_N = imCol.filterMetadata('relativeOrbitNumber_start', 'equals', relorb_num)
 
-    for filter_property in meta_filters_gt.keys():
-        filter_value = meta_filters_gt[filter_property]
-        imCol = imCol.filterMetadata(filter_property.upper(), 'greater_than', filter_value )
+    print(".. number of imgs: ",  imCol_relorb_N.size().getInfo() )
 
-    imCol = imCol.map(maskS2clouds)
+    dateList = (imCol_relorb_N.aggregate_array('system:time_start')
+                .map(lambda dateMillis: ee.Date(dateMillis).format('YYYY-MM-dd')) # convert to readable format
+                .distinct()).getInfo()
+    # print('.. distinct dates: ', dateList.sort().size().getInfo(), dateList.getInfo() )
+    print('.. distinct dates: ', len(dateList), dateList )
 
-    # col_distinct = ee.ImageCollection(col_best.distinct('MGRS_TILE'))
-    fCol_MGRStiles = imCol.distinct('MGRS_TILE')
-    imgs_list = fCol_MGRStiles.aggregate_array('system:index').getInfo() # featCol to list
-    
+    # Merge slices for distinct dates
+    imgs_list = merge_slices_per_day( imCol_relorb_N, dateList )
+    # print('.. e.g. merged slices of orbit first day: ', imgs_list[0].get('slice_numbers').getInfo())
 
     ''' ---------------------------------------------------------------------------
             Export images to Cloud Bucket
@@ -128,28 +129,22 @@ def main(configFile):
     
     im_task_list = []
 
-    print('.. Export {} MGRS tiles ({}m) to gcloud bucket {} '.format(len(imgs_list), scale,  my_bucket ))
-    # for i in range(0,5): #len(imgs_list)):
-    for i in range(5,len(imgs_list)):
-        # get img
-        imName = imgs_list[i] # select single img id from orbits_to_use
-        eeImg = (ee.Image('COPERNICUS/S2_SR_HARMONIZED/' + imName)
-                    .select(bnds)
-        )
+    print('.. Export {} relorbs ({}m) to gcloud bucket {} '.format(len(imgs_list), scale,  my_bucket ))
 
-        # eeImg_meta = eeImg.getInfo() # reads metadata    
-        # if nodata_value is not None:
-        #     eeImg = eeImg.unmask(-999) # fill no-data value 
-        if export_mask:
-            eeImg = eeImg.mask() # make binary mask data with 1s where valid values
-            filename_prefix = 'mask_S2_MGRStile_'
+    for i in range(0,len(imgs_list)):
+
+        eeImg =imgs_list[i].select(bnds)
 
         # export filename
-        file_name = filename_prefix + imName 
+        slice_ids = eeImg.get('slice_ids').getInfo() # list with relorb IDs
+        img_date_base = slice_ids[0].split('T')[0] # get common substring
+        imName = img_date_base + '_orbit-'+ str(relorb_num) +'_sliceMosaic_' + str(scale) + 'm' 
+        file_name = imName 
 
         print(file_name)
+        # print('.. merged slices of orbit for this date: ', eeImg.get('slice_numbers').getInfo())
         
-        export_geometry = eeImg.geometry()
+        # export_geometry =eeImg.geometry()
             
         im_task = ee.batch.Export.image.toCloudStorage(
                 image = eeImg, # do not export toByte; then NaN mask will be converted to 0
