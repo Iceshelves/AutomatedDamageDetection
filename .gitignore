@@ -15,6 +15,9 @@ scripts/train-vae/__pycache__/
 training/
 tests/
 archive/
+files/
 
 # specific files
 scripts/train-vae/train-vae-S1.ini
+tmp_readme.rtf
+
