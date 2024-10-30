@@ -1,3 +1,9 @@
+'''Encode tiles from training and testset for every trained epoch of the VAE model, as well as their labels. 
+Save encoded latent_space_cutouts.npy files for later use, separate files for the encoded tiledata as encoded labeldata.
+Labeldata exists in two forms:
+- manual (drawn by hand on training images)
+- nerd (as produced bij the NeRD damage detection method, applied to the training images).
+'''
 
 import os
 import numpy as np
@@ -495,8 +501,8 @@ def main():
 
             if os.path.exists(encoded_data_file):
                 # read file
-                encoded_data = np.load(encoded_data_file)
-                print('---- loaded encoded data epoch {}; size: {}'.format(epoch_num, encoded_data.shape))
+                # encoded_data = np.load(encoded_data_file)
+                print('---- existing encoded data epoch {}; size: {}'.format(epoch_num, encoded_data.shape))
             else: 
                 # encode data and save file
                 encoded_data,_,_ = encoder.predict(tile_cutouts);
@@ -504,23 +510,8 @@ def main():
                 print('---- succesfully encoded data epoch {}; size: {}'.format(epoch_num, encoded_data.shape))
             
 
-
-            ''' ----------
-            predict output  
-            ------------'''   
-            #... not needed here
-
     print('Done')
         
-# if __name__ == '__main__':
-    # ''' running script using unnamed command line arguments '''
-#     #  Run script as "python path/to/script.py /path/to/model_dir"
-        
-#     # retrieve config filename from command line
-#     model_dir = sys.argv[1] if len(sys.argv) > 1 else None
-
-#     # run script
-#     main(model_dir)   
 
 if __name__ == '__main__':
     ''' running script using named command line arguments '''

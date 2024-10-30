@@ -197,17 +197,21 @@ def predict_and_save_tile( tiles_path, tileNum,
     ## Filename of prediction
     tilePredict_fileName = '{}_model_{}_epoch{}_predict.tif'.format(tileName,model_dir.split('_')[1],epoch_num)
     
-#     if os.path.exists( os.path.join(path2save, tilePredict_fileName )):
-#         print('Already predicted tile {}; continue'.format(tileNum))
-#         # continue
-#     else: 
-#         print('----\n Processing ' + tileName )
-        
-#         if not os.path.isfile(tile_file):
-#             print('----\n No tile found for {}; continue'.format(tileNum))
-#         else:
-#             print('.. do processing')
-            
+    ## code below moved to main()
+    # if os.path.exists( os.path.join(path2save, tilePredict_fileName )):
+    #     print('Already predicted tile {}; continue'.format(tileNum))
+    #     # continue
+    # else: 
+    #     print('----\n Processing ' + tile_file )
+
+    #     if not os.path.isfile(tile_file):
+    #         print('.. No tile found for {}; continue\n--'.format(tile_file))
+    #     else:
+    #         process_image( tile_file, tilePredict_fileName,
+    #             encoder, model_dir, epoch_num, 
+    #             bands , cutout_size, normThreshold, adaptHist,
+    #             path2save=path2save  )
+    
     return tile_file, tilePredict_fileName
 
 # def define_prediction_filename(image_filepath, model_dir, epoch_num ):
@@ -462,11 +466,6 @@ def main(encoder_dir, data_dir=None):
         print('---- Processing -----')
 
         for tileNum in tile_nums:
-            
-            # predict_and_save_tile( tiles_path, tileNum, 
-            #                     encoder, model_dir, epoch_num, 
-            #                     bands , cutout_size, normThreshold, adaptHist,
-            #                     path2save=path2save  )
             
             tile_file, tilePredict_fileName = predict_and_save_tile( tiles_path, tileNum, 
                                 encoder, model_dir, epoch_num, 

@@ -237,9 +237,7 @@ def main(model_dir):
 
     ''' ----------
     Create cut-outs
-        Actually read the tile, make cutouts, linked with labeldata
-
-    Update: do not link laabldata; now read same-tile NERD output
+        Actually read the tile, make cutouts, plot latent space
     ------------'''
 
     # for tile in tile_list: # from dataset.py _generate_cutouts
@@ -334,7 +332,7 @@ def main(model_dir):
 
     
         ''' ----------
-        Encode input 
+        (Load) Encode input 
         ------------'''
 
         encoded_data_file = os.path.join(path_to_model, tileName + "_encoded" + '_epoch'+str(epoch_num) +".npy")
@@ -350,16 +348,6 @@ def main(model_dir):
             # np.save(tileName + "_labels.npy", label_cutouts) # save encoded data for later use.
             print('---- succesfully encoded data epoch {}; size: {}'.format(epoch_num, encoded_data.shape))
 
-
-
-
-        ''' ----------
-        predict output  
-        ------------'''   
-        #     # predicted_data = model.predict(test_set_tf); # reconstruct images (windows):
-        #     predicted_data = model.predict(tile_cutouts); # reconstruct images (windows):
-        #     np.save(tileName + "_predicted.npy",predicted_data)
-        #     print('---- succesfully predicted data')
 
 
         ''' ----------
