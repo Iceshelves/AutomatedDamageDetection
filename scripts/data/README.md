@@ -8,7 +8,7 @@ This directory contains the scripts used to transfer data between platforms.
 - Google Earth Engine (GEE) Assets
 
 ## File pipeline:
-1. Filter and select satellite images in the Google Earth Engine; these are exported to GCS. Script: gee_export_S2_MGRS_tiles.py and gee_export_S1_relorb.py.
+1. Filter and select satellite images in the Google Earth Engine; these are exported to GCS. Script: https://code.earthengine.google.com/d82dedd43de7f0b77cb2e0160fc2198d , gee_export_S2_MGRS_tiles.py and gee_export_S1_relorb.py.
 2. Move images from GCS to dCache. Script: gcs-to-dcache.py
 3. Acces images on dCache from computing cluster to perform VAE training
 4. When predictions of damage detection are created, upload to GCS (using `gsutil`).
