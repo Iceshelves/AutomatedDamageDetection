@@ -12,12 +12,10 @@ scripts/train-vae/__pycache__/
 */Untitled*
 
 # directories
-training/
+training/*/
 tests/
 archive/
-files/
+*/archive/
+files/*/
 
 # specific files
-scripts/train-vae/train-vae-S1.ini
-tmp_readme.rtf
-
