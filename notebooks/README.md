@@ -5,9 +5,9 @@ pipeline:
 
 
 ## Directories
-* development: directory with notebooks that contain a lot of testing and development of any processing or plotting step -- **these notebooks are unorganised and might be unreadable**, but are kept for any potential insight that might be gained from them.
-* postprocessing: directory with notebooks that contain (development of) postprocessing and plotting steps. These notebooks might be converted to scripts, but can be useful reference.
-* preprocessing:  
+* postprocessing: directory with notebooks that contain (development of) postprocessing and plotting steps (e.g. cluster extraction after training completion of VAE model). These notebooks are mostly converted to scripts, but can be useful reference material.
+* preprocessing:  notebooks for data precprocessing steps
+* vae-development: directory with notebooks that contain development steps of the VAE model
 
 ## Files
 
